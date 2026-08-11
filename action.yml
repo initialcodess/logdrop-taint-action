@@ -1,0 +1,172 @@
+name: "LogDrop Taint"
+description: "iOS/Swift kaynak kodunda taint (veri akışı) analizi. Kaynak kod runner'dan çıkmaz; dışarıya yalnız SARIF üretilir."
+author: "Initial Code Software Solutions"
+
+branding:
+  icon: shield
+  color: blue
+
+inputs:
+  license:
+    description: "LogDrop lisans anahtarı. Depo gizliliğine (secret) koyup buradan geçirin. Çevrimdışı doğrulanır; hiçbir yere veri gönderilmez."
+    required: true
+  path:
+    description: "Taranacak .swift dosyası ya da dizin (repo köküne göre)."
+    required: false
+    default: "."
+  repo-root:
+    description: "SARIF yollarının göreceleneceği kök. Code Scanning bulguyu dosyaya ancak repo kökünden görünen yolla bağlar."
+    required: false
+    default: ${{ github.workspace }}
+  sarif-file:
+    description: "Üretilecek SARIF dosyasının yolu."
+    required: false
+    default: "logdrop-taint.sarif"
+  fail-on-findings:
+    description: "Bulgu varsa adımı kırar. CI kapısı olarak kullanılır."
+    required: false
+    default: "false"
+  annotations:
+    description: "Bulguları PR'da ilgili satırın üstünde kutu olarak göster. Ücretsizdir; Code Scanning lisansı gerektirmez."
+    required: false
+    default: "true"
+  upload-sarif:
+    description: "SARIF'i Code Scanning'e yükle. Deponuzda Code Scanning kapalıysa adım uyarı verip geçer, build'i kırmaz."
+    required: false
+    default: "true"
+  analyzer-version:
+    description: "İndirilecek analizci sürümü. Varsayılan, bu Action sürümüyle birlikte test edilmiş olandır — değiştirmeniz gerekmez."
+    required: false
+    default: "v1.2.1"
+
+outputs:
+  sarif-file:
+    description: "Üretilen SARIF dosyasının yolu."
+    value: ${{ inputs.sarif-file }}
+  findings:
+    description: "Bulunan bulgu sayısı."
+    value: ${{ steps.scan.outputs.findings }}
+
+runs:
+  using: composite
+  steps:
+    # Analizci hazır derlenmiş gelir: müşterinin makinesinde derleme yok
+    # (~4 dakika kazanç) ve kaynak koda erişim gerekmez.
+    - name: Analizciyi indir
+      id: fetch
+      shell: bash
+      env:
+        VERSION: ${{ inputs.analyzer-version }}
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+        if ! [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "::error::Geçersiz analyzer-version: '$VERSION' (beklenen biçim: v1.2.3)"
+          exit 1
+        fi
+
+        dir="$RUNNER_TEMP/logdrop-taint/$VERSION"
+        mkdir -p "$dir"
+        echo "dir=$dir" >> "$GITHUB_OUTPUT"
+
+        # Aynı iş akışında birden çok kez çağrılırsa yeniden indirme.
+        if [ -x "$dir/logdrop-taint" ]; then
+          echo "Önbellekten kullanılıyor: $VERSION"
+          exit 0
+        fi
+
+        archive="logdrop-taint-${VERSION}-macos-universal.tar.gz"
+        base="https://github.com/initialcodess/logdrop-taint-action/releases/download/${VERSION}"
+
+        curl -fsSL --retry 3 --retry-delay 2 -o "$dir/$archive" "$base/$archive"
+        curl -fsSL --retry 3 --retry-delay 2 -o "$dir/$archive.sha256" "$base/$archive.sha256"
+
+        # Bütünlük: indirilen paket yayımlananla birebir aynı olmalı.
+        ( cd "$dir" && shasum -a 256 -c "$archive.sha256" )
+
+        tar -xzf "$dir/$archive" -C "$dir"
+        chmod +x "$dir/logdrop-taint"
+        "$dir/logdrop-taint" --version
+
+    - name: Taramayı çalıştır
+      id: scan
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        # Anahtar komut satırına değil ortama konur: komut satırı koşu
+        # günlüklerinde ve süreç listesinde görünebilir.
+        LOGDROP_LICENSE: ${{ inputs.license }}
+        BIN_DIR: ${{ steps.fetch.outputs.dir }}
+        SCAN_PATH: ${{ inputs.path }}
+        SARIF_FILE: ${{ inputs.sarif-file }}
+        REPO_ROOT: ${{ inputs.repo-root }}
+        FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
+        ANNOTATIONS: ${{ inputs.annotations }}
+      run: |
+        set -o pipefail
+        args=("$SCAN_PATH" --sarif "$SARIF_FILE" --repo-root "$REPO_ROOT" --verbose)
+        [ "$FAIL_ON_FINDINGS" = "true" ] && args+=(--fail-on-findings)
+        [ "$ANNOTATIONS" = "true" ] && args+=(--github-annotations)
+
+        # Çıkış kodunu KORU: 0 temiz · 1 bulgu · 2 lisans. Üçü ayrı anlam taşır.
+        set +e
+        "$BIN_DIR/logdrop-taint" "${args[@]}" | tee scan-output.txt
+        status=${PIPESTATUS[0]}
+        set -e
+
+        findings=$(sed -n 's/^LogDrop Taint: \([0-9]*\) bulgu.*/\1/p' scan-output.txt | head -1)
+        findings=${findings:-0}
+        echo "findings=$findings" >> "$GITHUB_OUTPUT"
+
+        {
+          echo "## LogDrop Taint"
+          echo ""
+          if [ "$findings" -eq 0 ]; then
+            echo "Bulgu yok."
+          else
+            echo "**$findings bulgu.**"
+            echo ""
+            echo "| Konum | Kural | Bulgu |"
+            echo "|---|---|---|"
+            sed -n 's/^  \[\([^]]*\)\] \([^ ]*\) — \(.*\)$/| `\2` | \1 | \3 |/p' scan-output.txt
+          fi
+        } >> "$GITHUB_STEP_SUMMARY"
+
+        # Bayrak çıkıştan ÖNCE yazılır ki --fail-on-findings ile çıksak da okunabilsin.
+        if [ -f "$SARIF_FILE" ]; then
+          echo "sarif-written=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "sarif-written=false" >> "$GITHUB_OUTPUT"
+        fi
+        rm -f scan-output.txt
+        exit $status
+
+    # Code Scanning public depolarda ücretsiz, private depolarda ücretli bir
+    # lisansa bağlı. Lisansı olmayan bir müşteride yükleme adımı hata verir ve
+    # tarama BAŞARILI olduğu hâlde build'i kırardı. Yoklayıp uyarıyla geçiyoruz:
+    # bulgu raporlaması (satır içi kutular + iş özeti + çıkış kodu) etkilenmez.
+    - name: Code Scanning kullanılabilir mi
+      id: codescanning
+      if: ${{ always() && inputs.upload-sarif == 'true' && steps.scan.outputs.sarif-written == 'true' }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        code=$(curl -sS -o /dev/null -w '%{http_code}' \
+          -H "Authorization: Bearer $GH_TOKEN" \
+          -H "Accept: application/vnd.github+json" \
+          "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/code-scanning/alerts?per_page=1" || echo 000)
+        case "$code" in
+          403|404)
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=SARIF yüklenmedi::Code Scanning bu depoda kullanılamıyor (HTTP $code). Private depolarda bu özellik ücretli bir Code Security lisansı ister; iş akışında 'security-events: write' izni de gerekir. Tarama çalıştı — bulgular satır içi uyarılarda ve iş özetinde görünür."
+            ;;
+          *) echo "available=true" >> "$GITHUB_OUTPUT" ;;
+        esac
+
+    - name: SARIF'i Code Scanning'e yükle
+      if: ${{ always() && steps.codescanning.outputs.available == 'true' }}
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ inputs.sarif-file }}
+        category: logdrop-taint
