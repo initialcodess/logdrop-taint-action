@@ -1,0 +1,78 @@
+# Yayımlanmış Action'ın gerçekten çalıştığını sürekli doğrular.
+#
+# Burası müşterinin `uses:` ile bağlandığı depo. Bir şey bozulursa (indirme URL'i,
+# sha256, sürüm eşleşmesi, lisans akışı) bunu MÜŞTERİDEN ÖNCE görmemiz gerekir.
+#
+# Fork'lardan gelen PR'larda çalışmaz: fork'lara secret verilmez, lisans olmadan
+# tarama exit 2 döner ve katkıcı anlamsız bir kırmızıyla karşılaşırdı.
+name: Duman testi
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 6 * * 1"     # her pazartesi 06:00 UTC — sessiz bozulmaları yakalar
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    name: Action'ı örnek kod üzerinde çalıştır
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Örnek Swift kaynağı üret
+        run: |
+          mkdir -p sample
+          cat > sample/Vulnerable.swift <<'SWIFT'
+          // Bilinen bir akış: kullanıcı girdisi temizlenmeden WebView'a gidiyor.
+          func render() {
+              let name = nameField.text ?? ""
+              webView.loadHTMLString("<h1>\(name)</h1>", baseURL: nil)
+          }
+          // Temizlenmiş hâli bulgu ÜRETMEMELİ.
+          func safe() {
+              let name = nameField.text ?? ""
+              webView.loadHTMLString(escapeHTML(name), baseURL: nil)
+          }
+          SWIFT
+
+      - name: LogDrop Taint
+        id: taint
+        continue-on-error: true      # bulgu bekleniyor
+        uses: ./
+        with:
+          license: ${{ secrets.LOGDROP_LICENSE }}
+          path: sample
+          fail-on-findings: "true"
+          upload-sarif: "false"
+
+      - name: Sonucu doğrula
+        env:
+          FINDINGS: ${{ steps.taint.outputs.findings }}
+          OUTCOME: ${{ steps.taint.outcome }}
+        run: |
+          set -euo pipefail
+          # Tam olarak BİR bulgu: zafiyetli fonksiyon yakalanmalı, temizlenmiş
+          # olan yakalanmamalı. "En az bir" demek, temizleyicinin bozulmasını
+          # gizlerdi — yanlış alarm bu üründe en pahalı hata.
+          if [ "${FINDINGS:-0}" -ne 1 ]; then
+            echo "::error::1 bulgu bekleniyordu, gelen: '${FINDINGS:-}' (adım sonucu: $OUTCOME)"
+            exit 1
+          fi
+          if [ "$OUTCOME" != "failure" ]; then
+            echo "::error::fail-on-findings açıkken adım kırılmalıydı (sonuç: $OUTCOME)"
+            exit 1
+          fi
+          test -f logdrop-taint.sarif || { echo "::error::SARIF üretilmedi"; exit 1; }
+          echo "Duman testi geçti: 1 bulgu, temizlenmiş akış sessiz, CI kapısı çalıştı."
+
+      - name: Lisanssız çalışmayı reddettiğini doğrula
+        run: |
+          set -euo pipefail
+          # Lisans kapısı ürünün ticari temeli; sessizce açılırsa kimse fark etmez.
+          bin="$(find "$RUNNER_TEMP/logdrop-taint" -name logdrop-taint -type f | head -1)"
+          test -n "$bin" || { echo "::error::indirilen ikili bulunamadı"; exit 1; }
+          set +e; env -u LOGDROP_LICENSE "$bin" sample --sarif /dev/null >/dev/null 2>&1; code=$?; set -e
+          [ "$code" -eq 2 ] || { echo "::error::lisanssız çalıştı (kod $code)"; exit 1; }
+          echo "Lisans kapısı doğrulandı: anahtarsız exit 2."
