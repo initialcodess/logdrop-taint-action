@@ -240,6 +240,12 @@ runs:
           400|422)
             echo "::warning title=Panel raporu gönderilemedi::Panel isteği reddetti ($code). bundle-id ve SARIF dosyasını kontrol edin: $(head -c 300 "$body")"
             ;;
+          413)
+            echo "::warning title=Panel raporu gönderilemedi::SARIF paneldeki boyut sınırını aştı (413). Taramayı daraltmayı deneyin: .logdrop.json içindeki exclude ile Pods/ ve üretilmiş kodu eleyin."
+            ;;
+          503)
+            echo "::warning title=Panel raporu gönderilemedi::Panel şu an hizmet veremiyor (503). Tarama etkilenmedi; sonraki koşuda yeniden denenecek."
+            ;;
           000)
             echo "::warning title=Panel raporu gönderilemedi::Panele ulaşılamadı ($PANEL_URL). Tarama etkilenmedi."
             ;;
