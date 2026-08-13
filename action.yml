@@ -45,7 +45,7 @@ inputs:
   analyzer-version:
     description: "İndirilecek analizci sürümü. Varsayılan, bu Action sürümüyle birlikte test edilmiş olandır — değiştirmeniz gerekmez."
     required: false
-    default: "v1.2.1"
+    default: "v1.3.0"
 
 outputs:
   sarif-file:
