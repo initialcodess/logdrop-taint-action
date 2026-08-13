@@ -235,7 +235,10 @@ runs:
             echo "::warning title=Panel raporu gönderilemedi::Lisans anahtarı panel tarafından kabul edilmedi (401). Anahtarı kontrol edin."
             ;;
           403)
-            echo "::warning title=Panel raporu gönderilemedi::Lisans süresi dolmuş görünüyor (403). Yenilemek için satis@initialcode.io"
+            # 403 iki ayrı sebep taşıyabiliyor: süresi dolmuş VEYA iptal edilmiş.
+            # "Yenileyin" demek iptal durumunda yanıltıcı olur; panelin kendi
+            # açıklamasını gösterip müşteriyi satışa yönlendiriyoruz.
+            echo "::warning title=Panel raporu gönderilemedi::Panel lisansı kabul etmedi (403): $(head -c 300 "$body") — lisans süresi dolmuş ya da iptal edilmiş olabilir. satis@initialcode.io"
             ;;
           400|422)
             echo "::warning title=Panel raporu gönderilemedi::Panel isteği reddetti ($code). bundle-id ve SARIF dosyasını kontrol edin: $(head -c 300 "$body")"
