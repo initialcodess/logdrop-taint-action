@@ -58,6 +58,34 @@ geçen veriyi bulgu saymaz. Temizleme **etiket bazlıdır**: HTML kaçışlamas�
 enjeksiyonu keser ama veriyi kişisel olmaktan çıkarmaz — kaçışlanmış bir e-posta
 log'a yazılırsa hâlâ bulgudur.
 
+## Kendi kod tabanınıza göre ayarlama
+
+Depo köküne `.logdrop.json` koyarak kuralları kendi projenize uyarlayabilirsiniz.
+**Yanlış alarmı gidermenin birincil yolu budur.**
+
+```json
+{
+  "sanitizers": { "guvenliHale": ["user-input"], "maskeleEposta": ["pii"] },
+  "sources":    { "tcKimlik": "pii", "musteriEposta": "pii" },
+  "sinks":      { "gizli": { "rule": "SWIFT-TAINT-PII-LOG", "accepts": ["pii"] } },
+  "passthrough": ["normalizeEt"],
+  "exclude":     ["Pods/", "Generated/", "Tests/"]
+}
+```
+
+| Alan | Ne işe yarar |
+|---|---|
+| `sanitizers` | Sizin temizleyici fonksiyonunuz; hangi kirlilik türünü giderdiğini yazın. Bulgu üretilmez. |
+| `sources` | Sizin kişisel-veri alanlarınız (`tcKimlik` gibi). |
+| `sinks` | Sizin sarmalayıcınız (kendi log sınıfınız gibi) — hangi kurala bağlanacağını yazın. |
+| `passthrough` | Veriyi dönüştüren ama kirliliği koruyan kendi yardımcılarınız. |
+| `exclude` | Taranmayacak yollar (`Pods/` gibi). Yol bu parçayı içeriyorsa atlanır. |
+
+Etiketler: `user-input`, `hardcoded-secret`, `pii`.
+
+Hatalı bir ayar **sessizce yok sayılmaz**: tanınmayan alan, kural ya da etiket
+tarama başlamadan reddedilir ve mesaj kullanılabilir olanları listeler.
+
 ## Girdiler
 
 | Girdi | Varsayılan | Açıklama |
@@ -82,6 +110,7 @@ log'a yazılırsa hâlâ bulgudur.
 | `0` | Temiz — bulgu yok |
 | `1` | Bulgu var (yalnız `fail-on-findings: "true"` ile) |
 | `2` | Lisans sorunu (yok / bozuk / süresi dolmuş) |
+| `3` | `.logdrop.json` ayar dosyasında hata |
 
 ## Lisans
 
