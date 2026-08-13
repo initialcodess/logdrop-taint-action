@@ -58,6 +58,31 @@ geçen veriyi bulgu saymaz. Temizleme **etiket bazlıdır**: HTML kaçışlamas�
 enjeksiyonu keser ama veriyi kişisel olmaktan çıkarmaz — kaçışlanmış bir e-posta
 log'a yazılırsa hâlâ bulgudur.
 
+## LogDrop paneline gönderme (isteğe bağlı)
+
+Bulguları geçmişiyle birlikte izlemek, aynı uygulamanın ikili (Katman 1) ve kaynak
+taramalarını tek ekranda görmek ve "bu yanlış alarm" kararlarını taramalar arasında
+taşımak isterseniz raporu panele gönderebilirsiniz:
+
+```yaml
+- uses: initialcodess/logdrop-taint-action@v1
+  with:
+    license: ${{ secrets.LOGDROP_LICENSE }}
+    path: Sources
+    bundle-id: com.sirket.uygulama       # panele gönderirken zorunlu
+    panel-url: https://panel.logdrop.io
+```
+
+**Varsayılan kapalıdır.** `panel-url` yazmazsanız hiçbir şey gönderilmez ve tarama
+tamamen yerel kalır.
+
+Gönderildiğinde giden tek şey **SARIF**'tir: kural kimliği, dosya yolu ve satır
+numarası. Kaynak kod metni ne SARIF'e girer ne de gönderilir. Yine de dosya
+*yolları* makineden çıkar; karar bu yüzden sizindir.
+
+Panel erişilemezse ya da anahtarı kabul etmezse **derlemeniz kırılmaz** — uyarı
+düşer, tarama sonucu (satır içi uyarılar, iş özeti, çıkış kodu) etkilenmez.
+
 ## Kendi kod tabanınıza göre ayarlama
 
 Depo köküne `.logdrop.json` koyarak kuralları kendi projenize uyarlayabilirsiniz.
@@ -97,6 +122,8 @@ tarama başlamadan reddedilir ve mesaj kullanılabilir olanları listeler.
 | `upload-sarif` | `true` | Code Scanning'e yükleme dener. |
 | `sarif-file` | `logdrop-taint.sarif` | SARIF çıktı yolu. |
 | `repo-root` | `github.workspace` | SARIF yollarının göreceleneceği kök. |
+| `panel-url` | *(boş)* | LogDrop paneline rapor gönderilecekse panel adresi. **Boşsa hiçbir şey gönderilmez.** |
+| `bundle-id` | *(boş)* | Uygulama kimliği. `panel-url` verildiyse zorunlu. |
 | `analyzer-version` | bu sürümle test edilmiş sürüm | Değiştirmeniz gerekmez. |
 
 **Çıktılar:** `findings` (bulgu sayısı), `sarif-file`.

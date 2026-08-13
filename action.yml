@@ -34,6 +34,14 @@ inputs:
     description: "SARIF'i Code Scanning'e yükle. Deponuzda Code Scanning kapalıysa adım uyarı verip geçer, build'i kırmaz."
     required: false
     default: "true"
+  panel-url:
+    description: "LogDrop paneline rapor gönderilecekse panel adresi. BOŞ BIRAKILIRSA hiçbir şey gönderilmez (varsayılan). Gönderilen tek şey SARIF'tir; kaynak kod değil."
+    required: false
+    default: ""
+  bundle-id:
+    description: "Uygulama kimliği (ör. com.sirket.uygulama). panel-url verildiyse zorunlu — panelde ikili ve kaynak raporları bu kimlikle aynı uygulamada birleşir."
+    required: false
+    default: ""
   analyzer-version:
     description: "İndirilecek analizci sürümü. Varsayılan, bu Action sürümüyle birlikte test edilmiş olandır — değiştirmeniz gerekmez."
     required: false
@@ -170,3 +178,73 @@ runs:
       with:
         sarif_file: ${{ inputs.sarif-file }}
         category: logdrop-taint
+
+    # LogDrop paneline rapor gönderimi — İSTEĞE BAĞLI, varsayılan KAPALI.
+    #
+    # Gizlilik: gönderilen tek şey SARIF'tir (kural + dosya + satır). Kaynak kod
+    # metni ne SARIF'e girer ne de gönderilir. Yine de dosya YOLLARI makineden
+    # çıkar; bu yüzden karar müşterinindir ve varsayılan kapalıdır.
+    #
+    # Ağ çağrısı ANALİZCİDE değil burada: ikili hiçbir sunucuya bağlanmaz,
+    # "program kimseye çalıştırıldım demez" sözü böyle korunuyor.
+    #
+    # always(): fail-on-findings açıkken tarama adımı 1 ile çıkar. Rapor asıl
+    # o zaman gönderilmeli — bulgu varken.
+    - name: Paneli bilgilendir
+      if: ${{ always() && inputs.panel-url != '' && steps.scan.outputs.sarif-written == 'true' }}
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        PANEL_URL: ${{ inputs.panel-url }}
+        BUNDLE_ID: ${{ inputs.bundle-id }}
+        LICENSE: ${{ inputs.license }}
+        SARIF_FILE: ${{ inputs.sarif-file }}
+        APP_NAME: ${{ github.event.repository.name }}
+        COMMIT: ${{ github.sha }}
+        REF_NAME: ${{ github.ref_name }}
+      run: |
+        set -uo pipefail
+        if [ -z "$BUNDLE_ID" ]; then
+          echo "::error title=bundle-id eksik::panel-url verildi ama bundle-id verilmedi. Panelde raporun hangi uygulamaya ait olduğu bundle-id ile belirlenir."
+          exit 1
+        fi
+
+        url="${PANEL_URL%/}/api/reports/sarif"
+        body="$RUNNER_TEMP/panel-response.txt"
+
+        # `|| echo 000` YOK: curl bağlanamadığında -w zaten "000" yazar; ikisi
+        # birleşince kod "000000" olur ve "panele ulaşılamadı" dalı hiç çalışmaz.
+        code=$(curl -sS -o "$body" -w '%{http_code}' -X POST "$url" \
+          -H "Authorization: Bearer $LICENSE" \
+          -F "sarif=@$SARIF_FILE" \
+          -F "bundle_id=$BUNDLE_ID" \
+          -F "app_name=$APP_NAME" \
+          -F "version=$REF_NAME" \
+          -F "commit=$COMMIT")
+        code=${code:-000}
+
+        # Panel gönderimi build'i KIRMAZ. Tarama başarılı, bulgu raporlaması
+        # (satır içi uyarılar + iş özeti + çıkış kodu) zaten çalıştı; panel
+        # bakımdayken müşterinin PR'ının kırmızıya dönmesi bize yazılmış bir
+        # arıza olurdu. Sessiz de geçmiyoruz — uyarı düşüyor.
+        case "$code" in
+          200|201)
+            echo "Panele gönderildi: $(head -c 300 "$body")"
+            ;;
+          401)
+            echo "::warning title=Panel raporu gönderilemedi::Lisans anahtarı panel tarafından kabul edilmedi (401). Anahtarı kontrol edin."
+            ;;
+          403)
+            echo "::warning title=Panel raporu gönderilemedi::Lisans süresi dolmuş görünüyor (403). Yenilemek için satis@initialcode.io"
+            ;;
+          400|422)
+            echo "::warning title=Panel raporu gönderilemedi::Panel isteği reddetti ($code). bundle-id ve SARIF dosyasını kontrol edin: $(head -c 300 "$body")"
+            ;;
+          000)
+            echo "::warning title=Panel raporu gönderilemedi::Panele ulaşılamadı ($PANEL_URL). Tarama etkilenmedi."
+            ;;
+          *)
+            echo "::warning title=Panel raporu gönderilemedi::Panel $code döndü: $(head -c 300 "$body")"
+            ;;
+        esac
+        rm -f "$body"
