@@ -53,6 +53,16 @@ jobs:
           OUTCOME: ${{ steps.taint.outcome }}
         run: |
           set -euo pipefail
+
+          # continue-on-error, bulgu çıkışını (1) tolere etmek için var — ama HER
+          # hatayı yutuyor. İndirme 404 verdiğinde de bulgu sayısı boş kalıyor ve
+          # "1 bulgu bekleniyordu" diyerek yanlış yeri gösteriyordu. Önce indirmeyi
+          # ayırt et: ikili yoksa sorun taramada değil, dağıtımda.
+          if ! find "$RUNNER_TEMP/logdrop-taint" -name logdrop-taint -type f 2>/dev/null | grep -q .; then
+            echo "::error title=Analizci indirilemedi::İkili çekilemedi. En olası sebep: action.yml'deki analyzer-version sabiti henüz YAYIMLANMAMIŞ bir sürümü gösteriyor (sürüm çıkarma sırasında sabit, etiketten önce güncellenir — o aralıkta bu test kırılır ve sürüm yayımlanınca düzelir)."
+            exit 1
+          fi
+
           # Tam olarak BİR bulgu: zafiyetli fonksiyon yakalanmalı, temizlenmiş
           # olan yakalanmamalı. "En az bir" demek, temizleyicinin bozulmasını
           # gizlerdi — yanlış alarm bu üründe en pahalı hata.
