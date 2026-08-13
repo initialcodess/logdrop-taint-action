@@ -4,9 +4,14 @@ iOS/Swift **kaynak kodunda taint (veri akışı) analizi**. Kullanıcıdan gelen
 gizli olması gereken bir verinin, kodun içinde yolculuk edip tehlikeli bir yere
 temizlenmeden ulaşıp ulaşmadığını izler.
 
-**Kaynak kodunuz runner'dan çıkmaz.** Tarama yerelde koşar; dışarıya yalnız bulgu
-listesi (kural + dosya + satır) üretilir. Kaynak metni ne rapora ne de başka bir
-yere gider.
+**Kod tabanınız runner'dan çıkmaz.** Tarama yerelde koşar. Rapora giren şey bulgu
+listesidir: kural, dosya, satır — ve **bulgunun olduğu satır ile çevresindeki
+birkaç satır**, hatayı anlaşılır kılmak için (GitHub Code Scanning'in yaptığının
+aynısı). Dosyanın tamamı, taranan diğer dosyalar ve kodunuzun geri kalanı asla
+gönderilmez.
+
+Bunu da istemiyorsanız `snippets: "false"` deyin: rapor yalnız kural + `dosya:satır`
+taşır, kodunuzdan tek satır bile çıkmaz.
 
 ## Kullanım
 
@@ -76,9 +81,10 @@ taşımak isterseniz raporu panele gönderebilirsiniz:
 **Varsayılan kapalıdır.** `panel-url` yazmazsanız hiçbir şey gönderilmez ve tarama
 tamamen yerel kalır.
 
-Gönderildiğinde giden tek şey **SARIF**'tir: kural kimliği, dosya yolu ve satır
-numarası. Kaynak kod metni ne SARIF'e girer ne de gönderilir. Yine de dosya
-*yolları* makineden çıkar; karar bu yüzden sizindir.
+Gönderildiğinde giden tek şey **SARIF**'tir: kural kimliği, dosya yolu, satır
+numarası ve (açıksa) bulgu satırının kodu. Panelde hatalı kod gösterilip ilgili
+satır vurgulanabilsin diye. `snippets: "false"` ile kod parçalarını kapatabilir,
+`panel-url` vermeyerek gönderimi tümden durdurabilirsiniz.
 
 Panel erişilemezse ya da anahtarı kabul etmezse **derlemeniz kırılmaz** — uyarı
 düşer, tarama sonucu (satır içi uyarılar, iş özeti, çıkış kodu) etkilenmez.
@@ -119,6 +125,7 @@ tarama başlamadan reddedilir ve mesaj kullanılabilir olanları listeler.
 | `path` | `.` | Taranacak dosya ya da dizin. |
 | `fail-on-findings` | `false` | Bulgu varsa adımı kırar. |
 | `annotations` | `true` | PR'da satır içi kutular. |
+| `snippets` | `true` | Raporda hatalı satırın kodu + ±2 satır bağlam. `false` ise kodunuzdan hiçbir parça çıkmaz. |
 | `upload-sarif` | `true` | Code Scanning'e yükleme dener. |
 | `sarif-file` | `logdrop-taint.sarif` | SARIF çıktı yolu. |
 | `repo-root` | `github.workspace` | SARIF yollarının göreceleneceği kök. |

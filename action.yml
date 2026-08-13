@@ -42,6 +42,10 @@ inputs:
     description: "Uygulama kimliği (ör. com.sirket.uygulama). panel-url verildiyse zorunlu — panelde ikili ve kaynak raporları bu kimlikle aynı uygulamada birleşir."
     required: false
     default: ""
+  snippets:
+    description: "Raporda bulgu satırının kodunu ve ±2 satır bağlamı göster (varsayılan açık). 'false' yapılırsa rapor yalnız kural + dosya:satır taşır, kodunuzdan hiçbir parça çıkmaz."
+    required: false
+    default: "true"
   analyzer-version:
     description: "İndirilecek analizci sürümü. Varsayılan, bu Action sürümüyle birlikte test edilmiş olandır — değiştirmeniz gerekmez."
     required: false
@@ -110,11 +114,13 @@ runs:
         REPO_ROOT: ${{ inputs.repo-root }}
         FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
         ANNOTATIONS: ${{ inputs.annotations }}
+        SNIPPETS: ${{ inputs.snippets }}
       run: |
         set -o pipefail
         args=("$SCAN_PATH" --sarif "$SARIF_FILE" --repo-root "$REPO_ROOT" --verbose)
         [ "$FAIL_ON_FINDINGS" = "true" ] && args+=(--fail-on-findings)
         [ "$ANNOTATIONS" = "true" ] && args+=(--github-annotations)
+        [ "$SNIPPETS" = "false" ] && args+=(--no-snippets)
 
         # Çıkış kodunu KORU: 0 temiz · 1 bulgu · 2 lisans. Üçü ayrı anlam taşır.
         set +e
