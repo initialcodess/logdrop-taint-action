@@ -1,22 +1,22 @@
 # LogDrop Taint — GitHub Action
 
-iOS/Swift **kaynak kodunda taint (veri akışı) analizi**. Kullanıcıdan gelen ya da
-gizli olması gereken bir verinin, kodun içinde yolculuk edip tehlikeli bir yere
-temizlenmeden ulaşıp ulaşmadığını izler.
+**Taint (data-flow) analysis for iOS/Swift source code.** It tracks whether data
+that came from a user — or data that was meant to stay secret — travels through
+your code and reaches somewhere dangerous without being sanitised.
 
-**Kod tabanınız runner'dan çıkmaz.** Tarama yerelde koşar. Rapora giren şey bulgu
-listesidir: kural, dosya, satır — ve **bulgunun olduğu satır ile çevresindeki
-birkaç satır**, hatayı anlaşılır kılmak için (GitHub Code Scanning'in yaptığının
-aynısı). Dosyanın tamamı, taranan diğer dosyalar ve kodunuzun geri kalanı asla
-gönderilmez.
+**Your codebase never leaves the runner.** The scan runs locally. What goes into
+the report is the list of findings: the rule, the file, the line — and **the
+offending line plus a few lines around it**, so the problem is legible (exactly
+what GitHub Code Scanning does). The whole file, the other files scanned and the
+rest of your code are never sent.
 
-Bunu da istemiyorsanız `snippets: "false"` deyin: rapor yalnız kural + `dosya:satır`
-taşır, kodunuzdan tek satır bile çıkmaz.
+If you do not want even that, set `snippets: "false"`: the report then carries only
+the rule and `file:line`, and not a single line of your code leaves.
 
-## Kullanım
+## Usage
 
 ```yaml
-name: Güvenlik taraması
+name: Security scan
 on: [pull_request]
 
 jobs:
@@ -24,7 +24,7 @@ jobs:
     runs-on: macos-15
     permissions:
       contents: read
-      security-events: write   # yalnız Code Scanning'e yükleyecekseniz
+      security-events: write   # only if you upload to Code Scanning
     steps:
       - uses: actions/checkout@v4
       - uses: initialcodess/logdrop-taint-action@v1
@@ -34,162 +34,164 @@ jobs:
           fail-on-findings: "true"
 ```
 
-`macos-15` gerekir (Swift 6+). Analizci hazır derlenmiş indirilir — projenizde
-Swift derlemesi yapılmaz.
+`macos-15` is required (Swift 6+). The analyzer is downloaded prebuilt — nothing
+is compiled in your project.
 
-## GitHub'sız kullanım (kendi makinenizde / kendi sunucunuzda)
+## Using it without GitHub (your machine, your server)
 
-Analizci **tek bir çalıştırılabilir dosyadır** ve yalnız macOS ister — Xcode,
-Swift kurulumu, Homebrew, hiçbiri gerekmez. Yani GitHub Actions'a bağlı değilsiniz:
+The analyzer is **a single executable** and needs only macOS — no Xcode, no Swift
+toolchain, no Homebrew. So you are not tied to GitHub Actions:
 
 ```bash
-# Bir kez indirin (sürümü değiştirebilirsiniz)
+# Download it once (change the version as needed)
 V=v1.4.0
 curl -fsSL -O "https://github.com/initialcodess/logdrop-taint-action/releases/download/$V/logdrop-taint-$V-macos-universal.tar.gz"
 curl -fsSL -O "https://github.com/initialcodess/logdrop-taint-action/releases/download/$V/logdrop-taint-$V-macos-universal.tar.gz.sha256"
-shasum -a 256 -c "logdrop-taint-$V-macos-universal.tar.gz.sha256"   # bütünlük
+shasum -a 256 -c "logdrop-taint-$V-macos-universal.tar.gz.sha256"   # integrity
 tar -xzf "logdrop-taint-$V-macos-universal.tar.gz"
 
-# Çalıştırın
+# Run it
 export LOGDROP_LICENSE="LOGDROP...."
-./logdrop-taint Sources --sarif rapor.sarif --verbose --fail-on-findings
+./logdrop-taint Sources --sarif report.sarif --verbose --fail-on-findings
 ```
 
-Nerede işinize yarar:
+Where that helps:
 
-- **Geliştirici makinesinde** — push etmeden önce kendi kodunuzu tarayın.
-- **Kendi build sunucunuzda** (Jenkins, TeamCity, Bitrise, kendi Mac mini'niz):
-  yukarıdaki iki satırı build adımınıza koyun. Çıkış kodu `1` ise bulgu var.
-- **fastlane / Xcode Run Script fazı** — aynı ikili, aynı çıkış kodu.
-- **Kendi barındırdığınız GitHub runner'ında** — bu Action olduğu gibi çalışır ve
-  GitHub'ın dakika ücreti işlemez.
+- **On a developer machine** — scan your own code before you push.
+- **On your own build server** (Jenkins, TeamCity, Bitrise, your Mac mini): put
+  the two lines above into your build step. Exit code `1` means findings.
+- **In a fastlane lane or an Xcode Run Script phase** — same binary, same exit codes.
+- **On a self-hosted GitHub runner** — this action works as-is and GitHub's
+  per-minute billing does not apply.
 
-`--sarif` çıktısı standart SARIF 2.1.0'dır; Xcode'da veya VS Code'un SARIF
-görüntüleyicisinde açabilir, kendi panelinize aktarabilirsiniz.
+The `--sarif` output is standard SARIF 2.1.0; open it in Xcode or VS Code's SARIF
+viewer, or feed it into your own dashboard.
 
-**Hazır tarifler:** [`examples/`](examples/) altında CircleCI, GitLab CI, Jenkins,
-Bitrise, fastlane, Xcode build fazı ve yerel makine için çalışır durumda örnekler
-var — hepsi aynı kurulum betiğini kullanıyor.
+**Ready-made recipes:** [`examples/`](examples/) has working setups for CircleCI,
+GitLab CI, Jenkins, Bitrise, fastlane, an Xcode build phase and a local machine —
+all built on the same install script.
 
-## Bulguları nerede görürsünüz
+## Where you see the findings
 
-Üçü de **ücretsizdir ve her GitHub planında** çalışır:
+All three are **free and work on every GitHub plan**:
 
-1. **PR'da satır içi kutu** — bulgu, "Files changed" görünümünde ilgili satırın
-   üstünde belirir.
-2. **İş özeti** — koşu sayfasında konum / kural / bulgu tablosu.
-3. **CI kapısı** — `fail-on-findings: "true"` ise bulgu varsa PR birleştirilemez.
+1. **An inline box on the pull request** — the finding appears above the relevant
+   line in the "Files changed" view.
+2. **The job summary** — a location / rule / finding table on the run page.
+3. **The CI gate** — with `fail-on-findings: "true"`, findings block the merge.
 
-Deponuzda **Code Scanning** açıksa SARIF oraya da yüklenir. Bu özellik public
-depolarda ücretsiz, private depolarda GitHub'ın ücretli Code Security lisansına
-bağlıdır; lisans yoksa adım uyarı verip geçer, **build'i kırmaz**.
+If **Code Scanning** is enabled on your repository, the SARIF is uploaded there as
+well. That feature is free on public repositories and depends on GitHub's paid Code
+Security licence on private ones; without a licence the step warns and moves on —
+it **does not break the build**.
 
-## Ne bulur
+## What it finds
 
-| Senaryo | CWE |
+| Scenario | CWE |
 |---|---|
-| Kullanıcı/ağ verisi `WKWebView`'a temizlenmeden akıyor | CWE-79 |
-| Koda gömülü sabit anahtar bir kripto API'sine akıyor | CWE-321 |
-| Kişisel veri (e-posta, telefon, parola, kimlik) log'a yazılıyor | CWE-532 |
+| User or network data reaches `WKWebView` unsanitised | CWE-79 |
+| A key hardcoded in the source reaches a crypto API | CWE-321 |
+| Personal data (email, phone, password, national ID) is written to a log | CWE-532 |
 
-Akışı fonksiyonlar arasında da izler ve `escapeHTML(...)` gibi temizleyicilerden
-geçen veriyi bulgu saymaz. Temizleme **etiket bazlıdır**: HTML kaçışlaması
-enjeksiyonu keser ama veriyi kişisel olmaktan çıkarmaz — kaçışlanmış bir e-posta
-log'a yazılırsa hâlâ bulgudur.
+It follows flows across functions too, and does not report data that passed through
+a sanitiser such as `escapeHTML(...)`. Sanitising is **label-specific**: escaping
+HTML stops the injection but does not stop the data being personal — an escaped
+email written to a log is still a finding.
 
-## LogDrop paneline gönderme (isteğe bağlı)
+## Sending reports to the LogDrop panel (optional)
 
-Bulguları geçmişiyle birlikte izlemek, aynı uygulamanın ikili (Katman 1) ve kaynak
-taramalarını tek ekranda görmek ve "bu yanlış alarm" kararlarını taramalar arasında
-taşımak isterseniz raporu panele gönderebilirsiniz:
+If you want to track findings over time, see the binary (Layer 1) and source scans
+for the same app on one screen, and carry "this is a false positive" decisions
+across scans, you can send the report to the panel:
 
 ```yaml
 - uses: initialcodess/logdrop-taint-action@v1
   with:
     license: ${{ secrets.LOGDROP_LICENSE }}
     path: Sources
-    bundle-id: com.sirket.uygulama       # panele gönderirken zorunlu
+    bundle-id: com.company.app           # required when sending to the panel
     panel-url: https://panel.logdrop.io
 ```
 
-**Varsayılan kapalıdır.** `panel-url` yazmazsanız hiçbir şey gönderilmez ve tarama
-tamamen yerel kalır.
+**Off by default.** Without `panel-url` nothing is sent and the scan stays entirely
+local.
 
-Gönderildiğinde giden tek şey **SARIF**'tir: kural kimliği, dosya yolu, satır
-numarası ve (açıksa) bulgu satırının kodu. Panelde hatalı kod gösterilip ilgili
-satır vurgulanabilsin diye. `snippets: "false"` ile kod parçalarını kapatabilir,
-`panel-url` vermeyerek gönderimi tümden durdurabilirsiniz.
+When it is sent, the only thing that goes is the **SARIF**: rule id, file path, line
+number and (if enabled) the code of the offending line — so the panel can show the
+faulty code with the relevant line highlighted. Turn the snippets off with
+`snippets: "false"`, or stop the sending altogether by leaving `panel-url` unset.
 
-Panel erişilemezse ya da anahtarı kabul etmezse **derlemeniz kırılmaz** — uyarı
-düşer, tarama sonucu (satır içi uyarılar, iş özeti, çıkış kodu) etkilenmez.
+If the panel is unreachable or refuses the key, **your build is not broken** — a
+warning is emitted and the scan result (inline annotations, job summary, exit code)
+is unaffected.
 
-## Kendi kod tabanınıza göre ayarlama
+## Adapting it to your codebase
 
-Depo köküne `.logdrop.json` koyarak kuralları kendi projenize uyarlayabilirsiniz.
-**Yanlış alarmı gidermenin birincil yolu budur.**
+Put a `.logdrop.json` at your repository root to adapt the rules to your project.
+**This is the primary way to clear a false positive.**
 
 ```json
 {
-  "sanitizers": { "guvenliHale": ["user-input"], "maskeleEposta": ["pii"] },
-  "sources":    { "tcKimlik": "pii", "musteriEposta": "pii" },
-  "sinks":      { "gizli": { "rule": "SWIFT-TAINT-PII-LOG", "accepts": ["pii"] } },
-  "passthrough": ["normalizeEt"],
+  "sanitizers": { "makeSafe": ["user-input"], "maskEmail": ["pii"] },
+  "sources":    { "nationalId": "pii", "customerEmail": "pii" },
+  "sinks":      { "secret": { "rule": "SWIFT-TAINT-PII-LOG", "accepts": ["pii"] } },
+  "passthrough": ["normalise"],
   "exclude":     ["Pods/", "Generated/", "Tests/"]
 }
 ```
 
-| Alan | Ne işe yarar |
+| Field | What it does |
 |---|---|
-| `sanitizers` | Sizin temizleyici fonksiyonunuz; hangi kirlilik türünü giderdiğini yazın. Bulgu üretilmez. |
-| `sources` | Sizin kişisel-veri alanlarınız (`tcKimlik` gibi). |
-| `sinks` | Sizin sarmalayıcınız (kendi log sınıfınız gibi) — hangi kurala bağlanacağını yazın. |
-| `passthrough` | Veriyi dönüştüren ama kirliliği koruyan kendi yardımcılarınız. |
-| `exclude` | Taranmayacak yollar (`Pods/` gibi). Yol bu parçayı içeriyorsa atlanır. |
+| `sanitizers` | Your own sanitising function; state which kind of taint it removes. No finding is produced past it. |
+| `sources` | Your own personal-data fields (`nationalId` and the like). |
+| `sinks` | Your own wrapper (your logging class, say) — state which rule it maps to. |
+| `passthrough` | Your own helpers that transform data but preserve taint. |
+| `exclude` | Paths to skip (`Pods/` etc.). A path is skipped if it contains the fragment. |
 
-Etiketler: `user-input`, `hardcoded-secret`, `pii`.
+Labels: `user-input`, `hardcoded-secret`, `pii`.
 
-Hatalı bir ayar **sessizce yok sayılmaz**: tanınmayan alan, kural ya da etiket
-tarama başlamadan reddedilir ve mesaj kullanılabilir olanları listeler.
+A bad config is **not ignored silently**: an unrecognised field, rule or label is
+rejected before the scan starts, and the message lists the valid ones.
 
-## Girdiler
+## Inputs
 
-| Girdi | Varsayılan | Açıklama |
+| Input | Default | Description |
 |---|---|---|
-| `license` | — | **Zorunlu.** Lisans anahtarı; secret olarak saklayın. |
-| `path` | `.` | Taranacak dosya ya da dizin. |
-| `fail-on-findings` | `false` | Bulgu varsa adımı kırar. |
-| `annotations` | `true` | PR'da satır içi kutular. |
-| `snippets` | `true` | Raporda hatalı satırın kodu + ±2 satır bağlam. `false` ise kodunuzdan hiçbir parça çıkmaz. |
-| `upload-sarif` | `true` | Code Scanning'e yükleme dener. |
-| `sarif-file` | `logdrop-taint.sarif` | SARIF çıktı yolu. |
-| `repo-root` | `github.workspace` | SARIF yollarının göreceleneceği kök. |
-| `panel-url` | *(boş)* | LogDrop paneline rapor gönderilecekse panel adresi. **Boşsa hiçbir şey gönderilmez.** |
-| `bundle-id` | *(boş)* | Uygulama kimliği. `panel-url` verildiyse zorunlu. |
-| `analyzer-version` | bu sürümle test edilmiş sürüm | Değiştirmeniz gerekmez. |
+| `license` | — | **Required.** Your licence key; keep it in a secret. |
+| `path` | `.` | The file or directory to scan. |
+| `fail-on-findings` | `false` | Fail the step when there are findings. |
+| `annotations` | `true` | Inline boxes on the pull request. |
+| `snippets` | `true` | The offending line plus ±2 lines of context in the report. With `false`, no fragment of your code leaves. |
+| `upload-sarif` | `true` | Attempt to upload to Code Scanning. |
+| `sarif-file` | `logdrop-taint.sarif` | SARIF output path. |
+| `repo-root` | `github.workspace` | The root SARIF paths are relative to. |
+| `panel-url` | *(empty)* | The panel address, if reports should go to the LogDrop panel. **Empty means nothing is sent.** |
+| `bundle-id` | *(empty)* | The application id. Required when `panel-url` is set. |
+| `analyzer-version` | the version tested with this release | You should not need to change it. |
 
-**Çıktılar:** `findings` (bulgu sayısı), `sarif-file`.
+**Outputs:** `findings` (the count), `sarif-file`.
 
-## Çıkış kodları
+## Exit codes
 
-Üçü ayrı anlam taşır; karıştırılmaz:
+The three mean different things and are never conflated:
 
-| Kod | Anlamı |
+| Code | Meaning |
 |---|---|
-| `0` | Temiz — bulgu yok |
-| `1` | Bulgu var (yalnız `fail-on-findings: "true"` ile) |
-| `2` | Lisans sorunu (yok / bozuk / süresi dolmuş) |
-| `3` | `.logdrop.json` ayar dosyasında hata |
+| `0` | Clean — no findings |
+| `1` | Findings (only with `fail-on-findings: "true"`) |
+| `2` | A licence problem (missing / invalid / expired) |
+| `3` | An error in the `.logdrop.json` config file |
 
-## Lisans
+## Licence
 
-LogDrop Taint **ticari bir üründür**; süreli bir anahtarla çalışır. Bu depo
-Action'ı ve derlenmiş analizciyi dağıtır — açık kaynak değildir, analizcinin
-kaynak kodu bu depoda bulunmaz.
+LogDrop Taint is **commercial software** and runs on a time-limited key. This
+repository distributes the action and the compiled analyzer — it is not open
+source, and the analyzer's source code is not in this repository.
 
-Anahtar **çevrimdışı** doğrulanır: program hiçbir sunucuya bağlanmaz, kullanımınızı
-saymaz, kimseye rapor göndermez. Süre dolmadan 14 gün önce uyarır.
+The key is verified **offline**: the program contacts no server, does not count your
+usage and reports to nobody. It warns 14 days before expiry.
 
-Anahtar edinmek için: **satis@initialcode.io**
+To obtain a key: **satis@initialcode.io**
 
 ---
 *Initial Code Software Solutions*

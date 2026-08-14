@@ -1,42 +1,42 @@
 #!/usr/bin/env bash
 #
-# LogDrop Taint kurulumu — indirir, BÜTÜNLÜĞÜNÜ DOĞRULAR, kullanıma hazır eder.
+# LogDrop Taint installer — downloads it, VERIFIES ITS INTEGRITY, makes it runnable.
 #
-# GitHub Actions dışındaki bütün entegrasyonlar (CircleCI, GitLab, Jenkins,
-# Bitrise, fastlane, yerel makine) aynı üç adımı yapar. O yüzden tek bir betik:
-# her CI bunu çağırır, kendi diliyle sarmalar.
+# Every integration other than GitHub Actions (CircleCI, GitLab, Jenkins, Bitrise,
+# fastlane, your own machine) does the same three steps. Hence one script: each CI
+# calls it and wraps it in its own dialect.
 #
-# Kullanım:
-#   ./install-logdrop-taint.sh                 # varsayılan sürüm, ./bin altına
+# Usage:
+#   ./install-logdrop-taint.sh                 # default version, into ./bin
 #   LOGDROP_VERSION=v1.4.0 ./install-logdrop-taint.sh
 #   LOGDROP_BIN_DIR=/usr/local/bin ./install-logdrop-taint.sh
 #
-# Çıktı: $LOGDROP_BIN_DIR/logdrop-taint
+# Output: $LOGDROP_BIN_DIR/logdrop-taint
 set -euo pipefail
 
 VERSION="${LOGDROP_VERSION:-v1.4.0}"
 BIN_DIR="${LOGDROP_BIN_DIR:-$PWD/bin}"
 REPO="initialcodess/logdrop-taint-action"
 
-# Sürüm biçimini doğrula: yanlış bir değer, anlaşılmaz bir 404'e dönüşür.
+# Validate the version format: a wrong value turns into a baffling 404.
 if ! [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  echo "hata: LOGDROP_VERSION 'v1.2.3' biçiminde olmalı (gelen: '$VERSION')" >&2
+  echo "error: LOGDROP_VERSION must look like 'v1.2.3' (got: '$VERSION')" >&2
   exit 1
 fi
 
-# macOS gerekir: analizci Apple sistem kütüphanelerine bağlı. Xcode ya da Swift
-# kurulumu GEREKMEZ — yalnız işletim sistemi.
+# macOS is required: the analyzer links against Apple system libraries. Xcode and a
+# Swift toolchain are NOT needed — only the operating system.
 if [ "$(uname -s)" != "Darwin" ]; then
-  echo "hata: LogDrop Taint macOS gerektirir (bulunan: $(uname -s))." >&2
-  echo "      Swift kurulumu ya da Xcode gerekmez, ama işletim sistemi macOS olmalı." >&2
+  echo "error: LogDrop Taint requires macOS (found: $(uname -s))." >&2
+  echo "       No Swift toolchain or Xcode needed, but the OS has to be macOS." >&2
   exit 1
 fi
 
 mkdir -p "$BIN_DIR"
 
-# Aynı sürüm zaten kuruluysa tekrar indirme (CI önbelleğiyle iyi çalışır).
+# Skip the download if the same version is already installed (plays well with CI caches).
 if [ -x "$BIN_DIR/logdrop-taint" ] && "$BIN_DIR/logdrop-taint" --version 2>/dev/null | grep -qx "${VERSION#v}"; then
-  echo "LogDrop Taint ${VERSION} zaten kurulu: $BIN_DIR/logdrop-taint"
+  echo "LogDrop Taint ${VERSION} is already installed: $BIN_DIR/logdrop-taint"
   exit 0
 fi
 
@@ -45,17 +45,17 @@ BASE="https://github.com/${REPO}/releases/download/${VERSION}"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-echo "İndiriliyor: ${VERSION}"
+echo "Downloading: ${VERSION}"
 curl -fsSL --retry 3 --retry-delay 2 -o "$WORK/$ARCHIVE" "$BASE/$ARCHIVE"
 curl -fsSL --retry 3 --retry-delay 2 -o "$WORK/$ARCHIVE.sha256" "$BASE/$ARCHIVE.sha256"
 
-# Bütünlük kontrolü ATLANMAZ: yarım inen ya da değiştirilmiş bir ikiliyle kod
-# taramak, taramamaktan kötüdür — yanlış bir güven verir.
-echo "Bütünlük doğrulanıyor (SHA-256)"
+# The integrity check is NEVER skipped: scanning with a truncated or altered binary
+# is worse than not scanning at all — it grants false confidence.
+echo "Verifying integrity (SHA-256)"
 ( cd "$WORK" && shasum -a 256 -c "$ARCHIVE.sha256" )
 
 tar -xzf "$WORK/$ARCHIVE" -C "$WORK"
 mv "$WORK/logdrop-taint" "$BIN_DIR/logdrop-taint"
 chmod +x "$BIN_DIR/logdrop-taint"
 
-echo "Kuruldu: $BIN_DIR/logdrop-taint ($("$BIN_DIR/logdrop-taint" --version))"
+echo "Installed: $BIN_DIR/logdrop-taint ($("$BIN_DIR/logdrop-taint" --version))"

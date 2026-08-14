@@ -1,70 +1,69 @@
-# Entegrasyon örnekleri
+# Integration recipes
 
-LogDrop Taint **GitHub'a bağlı değildir.** Analizci tek bir çalıştırılabilir
-dosyadır ve yalnız macOS ister — Xcode, Swift kurulumu, Homebrew gerekmez.
+LogDrop Taint is **not tied to GitHub.** The analyzer is a single executable and
+needs only macOS — no Xcode, no Swift toolchain, no Homebrew.
 
-## Model: her yerde aynı üç adım
+## The model: the same three steps everywhere
 
 ```
-1. İNDİR      →  sürüme göre, bir kez (önbelleğe alınabilir)
-2. DOĞRULA    →  SHA-256; bozuk/değiştirilmiş ikiliyle tarama yapılmaz
-3. ÇALIŞTIR   →  çıkış kodu kararı verir
+1. DOWNLOAD  →  once, per version (cacheable)
+2. VERIFY    →  SHA-256; a corrupt or altered binary never scans
+3. RUN       →  the exit code makes the decision
 ```
 
-İlk iki adım [`install-logdrop-taint.sh`](install-logdrop-taint.sh) içinde;
-aşağıdaki bütün örnekler onu çağırıyor. GitHub Actions kullanıyorsanız buna bile
-gerek yok, Action ikisini de kendisi yapar.
+The first two live in [`install-logdrop-taint.sh`](install-logdrop-taint.sh), and
+every recipe below calls it. On GitHub Actions you do not even need that — the
+action does both for you.
 
-## Çıkış kodları — her entegrasyonun dayandığı sözleşme
+## Exit codes — the contract every integration rests on
 
-| Kod | Anlamı | CI ne yapmalı |
+| Code | Meaning | What CI should do |
 |---|---|---|
-| `0` | Temiz | Devam |
-| `1` | Bulgu var (`--fail-on-findings` ile) | Derlemeyi kır, PR'ı engelle |
-| `2` | Lisans yok / bozuk / süresi dolmuş | Kır, ama "kodunuzda açık var" DEME |
-| `3` | `.logdrop.json` ayar dosyasında hata | Kır, ayar dosyasını düzelt |
+| `0` | Clean | Carry on |
+| `1` | Findings (with `--fail-on-findings`) | Fail the build, block the pull request |
+| `2` | Licence missing / invalid / expired | Fail, but DO NOT say "your code has a vulnerability" |
+| `3` | An error in `.logdrop.json` | Fail, fix the config file |
 
-`1` ile `2`'yi ayırmak önemli: lisansı biten geliştiriciye "kodunda güvenlik açığı
-var" demek yanlış yere bakmasına yol açar.
+Telling `1` and `2` apart matters: a developer whose licence lapsed will go looking
+in entirely the wrong place if you tell them their code is insecure.
 
-## Örnekler
+## The recipes
 
-| Sistem | Dosya | Not |
+| System | File | Note |
 |---|---|---|
-| **GitHub Actions** | [ana README](../README.md) | Action her şeyi yapar; indirme/doğrulama dahil |
-| **CircleCI** | [`circleci/config.yml`](circleci/config.yml) | macOS executor gerekir (ücretli planlarda) |
-| **GitLab CI** | [`gitlab/.gitlab-ci.yml`](gitlab/.gitlab-ci.yml) | macOS runner gerekir; kendi Mac'iniz ücretsiz |
-| **Jenkins** | [`jenkins/Jenkinsfile`](jenkins/Jenkinsfile) | `macos` etiketli agent |
-| **Bitrise** | [`bitrise/bitrise.yml`](bitrise/bitrise.yml) | Zaten macOS yığını; ek gereksinim yok |
-| **fastlane** | [`fastlane/Fastfile`](fastlane/Fastfile) | Derlemeden önce koşturun |
-| **Xcode** | [`xcode/run-script-phase.sh`](xcode/run-script-phase.sh) | Bulgular Xcode uyarısı olarak görünür |
-| **Yerel makine** | [`local/scan.sh`](local/scan.sh) | Push etmeden önce kendi kodunuzu tarayın |
+| **GitHub Actions** | [main README](../README.md) | The action does everything, download and verification included |
+| **CircleCI** | [`circleci/config.yml`](circleci/config.yml) | Needs a macOS executor (on paid plans) |
+| **GitLab CI** | [`gitlab/.gitlab-ci.yml`](gitlab/.gitlab-ci.yml) | Needs a macOS runner; your own Mac is free |
+| **Jenkins** | [`jenkins/Jenkinsfile`](jenkins/Jenkinsfile) | An agent labelled `macos` |
+| **Bitrise** | [`bitrise/bitrise.yml`](bitrise/bitrise.yml) | Already a macOS stack; nothing extra needed |
+| **fastlane** | [`fastlane/Fastfile`](fastlane/Fastfile) | Run it before the build |
+| **Xcode** | [`xcode/run-script-phase.sh`](xcode/run-script-phase.sh) | Findings appear as Xcode warnings |
+| **Your own machine** | [`local/scan.sh`](local/scan.sh) | Scan your code before you push |
 
-## Lisans anahtarı nereye konur
+## Where the licence key goes
 
-Her zaman **`LOGDROP_LICENSE` ortam değişkenine**, ve her zaman o sistemin
-gizli-değer deposundan gelmeli:
+Always in the **`LOGDROP_LICENSE` environment variable**, and always sourced from
+that system's secret store:
 
-| Sistem | Yer |
+| System | Where |
 |---|---|
 | GitHub Actions | Repository secrets |
 | CircleCI | Project Settings → Environment Variables |
-| GitLab | Settings → CI/CD → Variables (**Masked** işaretleyin) |
+| GitLab | Settings → CI/CD → Variables (tick **Masked**) |
 | Jenkins | Credentials → Secret text |
 | Bitrise | Secrets |
-| Yerel | `export LOGDROP_LICENSE=...` ya da `~/.logdrop/license` |
+| Local | `export LOGDROP_LICENSE=...` or `~/.logdrop/license` |
 
-Anahtarı yapılandırma dosyasına yazmayın: komut satırı argümanları koşu
-günlüklerinde ve süreç listesinde görünebilir, o yüzden örneklerin hepsi ortam
-değişkeni kullanıyor.
+Do not write the key into a configuration file: command-line arguments can show up
+in run logs and in the process list, which is why every recipe here uses the
+environment variable.
 
-## macOS gerekliliği
+## The macOS requirement
 
-Analizci Apple sistem kütüphanelerine bağlı olduğu için macOS'ta çalışır. Pratikte
-bu bir kısıt değil: iOS kaynağı zaten macOS'ta derleniyor, yani o makine hâlihazırda
-elinizde.
+The analyzer runs on macOS because it links against Apple system libraries. In
+practice that is not a constraint: iOS source is already built on macOS, so the
+machine is one you already have.
 
-**Maliyet notu:** bulut sağlayıcıları macOS makineyi Linux'tan belirgin biçimde
-pahalı ücretlendirir (GitHub'da ~10 kat). Tarama saniyeler sürdüğü için ek maliyet
-küçüktür, ama kendi Mac'inizi runner olarak kullanırsanız **sıfırlanır** — ve iOS
-ekiplerinin çoğunda zaten bir build makinesi vardır.
+**A note on cost:** cloud providers bill macOS noticeably higher than Linux (~10x
+on GitHub). A scan takes seconds, so the extra is small — and it drops to **zero**
+if you use your own Mac as a runner, which most iOS teams already have.

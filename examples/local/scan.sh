@@ -1,25 +1,25 @@
 #!/usr/bin/env bash
 #
-# Geliştirici makinesinde tarama — push etmeden önce kendi kodunu kontrol et.
+# Scanning on a developer machine — check your own code before you push.
 #
 #   export LOGDROP_LICENSE="LOGDROP...."
 #   ./examples/local/scan.sh Sources
 #
-# CI'a hiç ihtiyaç yok. Aynı ikili, aynı kurallar, aynı çıkış kodları.
+# No CI needed at all. Same binary, same rules, same exit codes.
 set -euo pipefail
 
 TARGET="${1:-.}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Analizciyi kur (zaten kuruluysa atlar).
+# Install the analyzer (skipped if already installed).
 LOGDROP_BIN_DIR="${LOGDROP_BIN_DIR:-$HOME/.logdrop/bin}"
 export LOGDROP_BIN_DIR
 "$HERE/../install-logdrop-taint.sh"
 
 echo
-# `set -e` açıkken sıfırdan farklı çıkış betiği anında sonlandırır — ve bulgu
-# bulmak tam olarak sıfırdan farklı çıkıştır. Kodu okuyup anlamlandırabilmek için
-# bu çağrı boyunca kapatıyoruz.
+# With `set -e` a non-zero exit ends the script immediately — and finding something
+# is exactly a non-zero exit. We turn it off around this call so the code can be
+# read and acted on.
 set +e
 "$LOGDROP_BIN_DIR/logdrop-taint" "$TARGET" \
   --sarif "logdrop-taint.sarif" \
@@ -28,12 +28,12 @@ set +e
 status=$?
 set -e
 
-# Çıkış kodları ayrı anlam taşır — hangisi olduğunu insan diliyle söyle.
+# The exit codes mean different things — say which one it is in plain language.
 case $status in
-  0) echo; echo "Temiz: bulgu yok." ;;
-  1) echo; echo "Bulgu var. Ayrıntılı rapor: logdrop-taint.sarif"
-     echo "SARIF'i VS Code'un 'SARIF Viewer' eklentisiyle açabilirsiniz." ;;
-  2) echo; echo "Lisans sorunu. LOGDROP_LICENSE tanımlı mı, süresi dolmuş mu?" ;;
-  3) echo; echo ".logdrop.json ayar dosyanızda hata var (yukarıdaki mesaja bakın)." ;;
+  0) echo; echo "Clean: no findings." ;;
+  1) echo; echo "Findings. Full report: logdrop-taint.sarif"
+     echo "You can open the SARIF with VS Code's 'SARIF Viewer' extension." ;;
+  2) echo; echo "Licence problem. Is LOGDROP_LICENSE set, and has it expired?" ;;
+  3) echo; echo "There is an error in your .logdrop.json (see the message above)." ;;
 esac
 exit $status

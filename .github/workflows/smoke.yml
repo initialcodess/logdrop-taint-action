@@ -1,36 +1,36 @@
-# Yayımlanmış Action'ın gerçekten çalıştığını sürekli doğrular.
+# Continuously verifies that the published action actually works.
 #
-# Burası müşterinin `uses:` ile bağlandığı depo. Bir şey bozulursa (indirme URL'i,
-# sha256, sürüm eşleşmesi, lisans akışı) bunu MÜŞTERİDEN ÖNCE görmemiz gerekir.
+# This is the repository customers point `uses:` at. If something breaks (the
+# download URL, sha256, version match, licence flow) we need to see it BEFORE they do.
 #
-# Fork'lardan gelen PR'larda çalışmaz: fork'lara secret verilmez, lisans olmadan
-# tarama exit 2 döner ve katkıcı anlamsız bir kırmızıyla karşılaşırdı.
-name: Duman testi
+# It does not run on pull requests from forks: forks get no secrets, and without a
+# licence the scan exits 2, leaving a contributor with a meaningless red check.
+name: Smoke test
 
 on:
   push:
     branches: [main]
   schedule:
-    - cron: "0 6 * * 1"     # her pazartesi 06:00 UTC — sessiz bozulmaları yakalar
+    - cron: "0 6 * * 1"     # every Monday 06:00 UTC — catches silent breakage
   workflow_dispatch:
 
 jobs:
   smoke:
-    name: Action'ı örnek kod üzerinde çalıştır
+    name: Run the action over sample code
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 
-      - name: Örnek Swift kaynağı üret
+      - name: Generate sample Swift source
         run: |
           mkdir -p sample
           cat > sample/Vulnerable.swift <<'SWIFT'
-          // Bilinen bir akış: kullanıcı girdisi temizlenmeden WebView'a gidiyor.
+          // A known flow: user input reaches the WebView unsanitised.
           func render() {
               let name = nameField.text ?? ""
               webView.loadHTMLString("<h1>\(name)</h1>", baseURL: nil)
           }
-          // Temizlenmiş hâli bulgu ÜRETMEMELİ.
+          // The sanitised form must produce NO finding.
           func safe() {
               let name = nameField.text ?? ""
               webView.loadHTMLString(escapeHTML(name), baseURL: nil)
@@ -39,7 +39,7 @@ jobs:
 
       - name: LogDrop Taint
         id: taint
-        continue-on-error: true      # bulgu bekleniyor
+        continue-on-error: true      # findings are expected
         uses: ./
         with:
           license: ${{ secrets.LOGDROP_LICENSE }}
@@ -47,42 +47,42 @@ jobs:
           fail-on-findings: "true"
           upload-sarif: "false"
 
-      - name: Sonucu doğrula
+      - name: Verify the result
         env:
           FINDINGS: ${{ steps.taint.outputs.findings }}
           OUTCOME: ${{ steps.taint.outcome }}
         run: |
           set -euo pipefail
 
-          # continue-on-error, bulgu çıkışını (1) tolere etmek için var — ama HER
-          # hatayı yutuyor. İndirme 404 verdiğinde de bulgu sayısı boş kalıyor ve
-          # "1 bulgu bekleniyordu" diyerek yanlış yeri gösteriyordu. Önce indirmeyi
-          # ayırt et: ikili yoksa sorun taramada değil, dağıtımda.
+          # continue-on-error exists to tolerate the findings exit (1) — but it swallows
+          # EVERY failure. A 404 on the download also leaves the count empty, and the
+          # message "expected 1 finding" pointed at the wrong place. So separate the
+          # download first: no binary means the problem is distribution, not the scan.
           if ! find "$RUNNER_TEMP/logdrop-taint" -name logdrop-taint -type f 2>/dev/null | grep -q .; then
-            echo "::error title=Analizci indirilemedi::İkili çekilemedi. En olası sebep: action.yml'deki analyzer-version sabiti henüz YAYIMLANMAMIŞ bir sürümü gösteriyor (sürüm çıkarma sırasında sabit, etiketten önce güncellenir — o aralıkta bu test kırılır ve sürüm yayımlanınca düzelir)."
+            echo "::error title=Analyzer download failed::The binary could not be fetched. The likeliest cause: the analyzer-version pin in action.yml points at a version that has NOT been published yet (during a release the pin is updated before the tag — this test breaks in that window and recovers once the release is out)."
             exit 1
           fi
 
-          # Tam olarak BİR bulgu: zafiyetli fonksiyon yakalanmalı, temizlenmiş
-          # olan yakalanmamalı. "En az bir" demek, temizleyicinin bozulmasını
-          # gizlerdi — yanlış alarm bu üründe en pahalı hata.
+          # Exactly ONE finding: the vulnerable function must be caught and the
+          # sanitised one must not. "At least one" would hide the sanitiser breaking —
+          # a false positive is the most expensive mistake this product can make.
           if [ "${FINDINGS:-0}" -ne 1 ]; then
-            echo "::error::1 bulgu bekleniyordu, gelen: '${FINDINGS:-}' (adım sonucu: $OUTCOME)"
+            echo "::error::expected 1 finding, got: '${FINDINGS:-}' (step outcome: $OUTCOME)"
             exit 1
           fi
           if [ "$OUTCOME" != "failure" ]; then
-            echo "::error::fail-on-findings açıkken adım kırılmalıydı (sonuç: $OUTCOME)"
+            echo "::error::the step should have failed with fail-on-findings on (outcome: $OUTCOME)"
             exit 1
           fi
-          test -f logdrop-taint.sarif || { echo "::error::SARIF üretilmedi"; exit 1; }
-          echo "Duman testi geçti: 1 bulgu, temizlenmiş akış sessiz, CI kapısı çalıştı."
+          test -f logdrop-taint.sarif || { echo "::error::no SARIF was written"; exit 1; }
+          echo "Smoke test passed: 1 finding, the sanitised flow stayed quiet, the CI gate fired."
 
-      - name: Lisanssız çalışmayı reddettiğini doğrula
+      - name: Verify it refuses to run without a licence
         run: |
           set -euo pipefail
-          # Lisans kapısı ürünün ticari temeli; sessizce açılırsa kimse fark etmez.
+          # The licence gate is the product's commercial foundation; if it opens silently, nobody notices.
           bin="$(find "$RUNNER_TEMP/logdrop-taint" -name logdrop-taint -type f | head -1)"
-          test -n "$bin" || { echo "::error::indirilen ikili bulunamadı"; exit 1; }
+          test -n "$bin" || { echo "::error::the downloaded binary was not found"; exit 1; }
           set +e; env -u LOGDROP_LICENSE "$bin" sample --sarif /dev/null >/dev/null 2>&1; code=$?; set -e
-          [ "$code" -eq 2 ] || { echo "::error::lisanssız çalıştı (kod $code)"; exit 1; }
-          echo "Lisans kapısı doğrulandı: anahtarsız exit 2."
+          [ "$code" -eq 2 ] || { echo "::error::it ran without a licence (code $code)"; exit 1; }
+          echo "Licence gate verified: exit 2 without a key."

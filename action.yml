@@ -1,5 +1,5 @@
 name: "LogDrop Taint"
-description: "iOS/Swift kaynak kodunda taint (veri akışı) analizi. Kaynak kod runner'dan çıkmaz; dışarıya yalnız SARIF üretilir."
+description: "Taint (data-flow) analysis for iOS/Swift source code. Your source never leaves the runner; only SARIF is produced."
 author: "Initial Code Software Solutions"
 
 branding:
@@ -8,63 +8,63 @@ branding:
 
 inputs:
   license:
-    description: "LogDrop lisans anahtarı. Depo gizliliğine (secret) koyup buradan geçirin. Çevrimdışı doğrulanır; hiçbir yere veri gönderilmez."
+    description: "Your LogDrop licence key. Keep it in a repository secret and pass it here. It is verified offline; no data is sent anywhere."
     required: true
   path:
-    description: "Taranacak .swift dosyası ya da dizin (repo köküne göre)."
+    description: "The .swift file or directory to scan, relative to the repository root."
     required: false
     default: "."
   repo-root:
-    description: "SARIF yollarının göreceleneceği kök. Code Scanning bulguyu dosyaya ancak repo kökünden görünen yolla bağlar."
+    description: "The root that SARIF paths are relative to. Code Scanning can bind a finding to a file only through a repo-root path."
     required: false
     default: ${{ github.workspace }}
   sarif-file:
-    description: "Üretilecek SARIF dosyasının yolu."
+    description: "Path of the SARIF file to write."
     required: false
     default: "logdrop-taint.sarif"
   fail-on-findings:
-    description: "Bulgu varsa adımı kırar. CI kapısı olarak kullanılır."
+    description: "Fail the step when there are findings. Use it as a CI gate."
     required: false
     default: "false"
   annotations:
-    description: "Bulguları PR'da ilgili satırın üstünde kutu olarak göster. Ücretsizdir; Code Scanning lisansı gerektirmez."
+    description: "Show findings as a box above the line in the pull request. Free; no Code Scanning licence needed."
     required: false
     default: "true"
   upload-sarif:
-    description: "SARIF'i Code Scanning'e yükle. Deponuzda Code Scanning kapalıysa adım uyarı verip geçer, build'i kırmaz."
+    description: "Upload the SARIF to Code Scanning. If Code Scanning is off on your repository the step warns and moves on rather than breaking the build."
     required: false
     default: "true"
   panel-url:
-    description: "LogDrop paneline rapor gönderilecekse panel adresi. BOŞ BIRAKILIRSA hiçbir şey gönderilmez (varsayılan). Gönderilen tek şey SARIF'tir; kaynak kod değil."
+    description: "The panel address, if reports should be sent to the LogDrop panel. LEFT EMPTY, nothing is sent (the default). The only thing sent is the SARIF, never your source."
     required: false
     default: ""
   bundle-id:
-    description: "Uygulama kimliği (ör. com.sirket.uygulama). panel-url verildiyse zorunlu — panelde ikili ve kaynak raporları bu kimlikle aynı uygulamada birleşir."
+    description: "The application id (e.g. com.company.app). Required when panel-url is set — the panel merges binary and source reports into one app under it."
     required: false
     default: ""
   snippets:
-    description: "Raporda bulgu satırının kodunu ve ±2 satır bağlamı göster (varsayılan açık). 'false' yapılırsa rapor yalnız kural + dosya:satır taşır, kodunuzdan hiçbir parça çıkmaz."
+    description: "Include the offending line and ±2 lines of context in the report (on by default). Set to 'false' and the report carries only the rule and file:line — not a fragment of your code leaves."
     required: false
     default: "true"
   analyzer-version:
-    description: "İndirilecek analizci sürümü. Varsayılan, bu Action sürümüyle birlikte test edilmiş olandır — değiştirmeniz gerekmez."
+    description: "Which analyzer version to download. The default is the one tested with this action release — you should not need to change it."
     required: false
     default: "v1.4.0"
 
 outputs:
   sarif-file:
-    description: "Üretilen SARIF dosyasının yolu."
+    description: "Path of the SARIF file that was written."
     value: ${{ inputs.sarif-file }}
   findings:
-    description: "Bulunan bulgu sayısı."
+    description: "How many findings were reported."
     value: ${{ steps.scan.outputs.findings }}
 
 runs:
   using: composite
   steps:
-    # Analizci hazır derlenmiş gelir: müşterinin makinesinde derleme yok
-    # (~4 dakika kazanç) ve kaynak koda erişim gerekmez.
-    - name: Analizciyi indir
+    # The analyzer arrives prebuilt: nothing is compiled on the customer's machine
+    # (~4 minutes saved) and no access to the source is required.
+    - name: Download the analyzer
       id: fetch
       shell: bash
       env:
@@ -73,7 +73,7 @@ runs:
       run: |
         set -euo pipefail
         if ! [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-          echo "::error::Geçersiz analyzer-version: '$VERSION' (beklenen biçim: v1.2.3)"
+          echo "::error::Invalid analyzer-version: '$VERSION' (expected format: v1.2.3)"
           exit 1
         fi
 
@@ -81,9 +81,9 @@ runs:
         mkdir -p "$dir"
         echo "dir=$dir" >> "$GITHUB_OUTPUT"
 
-        # Aynı iş akışında birden çok kez çağrılırsa yeniden indirme.
+        # Do not download again if the action is used more than once in a workflow.
         if [ -x "$dir/logdrop-taint" ]; then
-          echo "Önbellekten kullanılıyor: $VERSION"
+          echo "Reusing the cached copy: $VERSION"
           exit 0
         fi
 
@@ -93,20 +93,20 @@ runs:
         curl -fsSL --retry 3 --retry-delay 2 -o "$dir/$archive" "$base/$archive"
         curl -fsSL --retry 3 --retry-delay 2 -o "$dir/$archive.sha256" "$base/$archive.sha256"
 
-        # Bütünlük: indirilen paket yayımlananla birebir aynı olmalı.
+        # Integrity: the downloaded archive must be byte-identical to the published one.
         ( cd "$dir" && shasum -a 256 -c "$archive.sha256" )
 
         tar -xzf "$dir/$archive" -C "$dir"
         chmod +x "$dir/logdrop-taint"
         "$dir/logdrop-taint" --version
 
-    - name: Taramayı çalıştır
+    - name: Run the scan
       id: scan
       shell: bash
       working-directory: ${{ github.workspace }}
       env:
-        # Anahtar komut satırına değil ortama konur: komut satırı koşu
-        # günlüklerinde ve süreç listesinde görünebilir.
+        # The key goes in the environment, not on the command line: command lines can
+        # show up in run logs and in the process list.
         LOGDROP_LICENSE: ${{ inputs.license }}
         BIN_DIR: ${{ steps.fetch.outputs.dir }}
         SCAN_PATH: ${{ inputs.path }}
@@ -122,13 +122,13 @@ runs:
         [ "$ANNOTATIONS" = "true" ] && args+=(--github-annotations)
         [ "$SNIPPETS" = "false" ] && args+=(--no-snippets)
 
-        # Çıkış kodunu KORU: 0 temiz · 1 bulgu · 2 lisans. Üçü ayrı anlam taşır.
+        # PRESERVE the exit code: 0 clean · 1 findings · 2 licence. Each means something different.
         set +e
         "$BIN_DIR/logdrop-taint" "${args[@]}" | tee scan-output.txt
         status=${PIPESTATUS[0]}
         set -e
 
-        findings=$(sed -n 's/^LogDrop Taint: \([0-9]*\) bulgu.*/\1/p' scan-output.txt | head -1)
+        findings=$(sed -n 's/^LogDrop Taint: \([0-9]*\) finding.*/\1/p' scan-output.txt | head -1)
         findings=${findings:-0}
         echo "findings=$findings" >> "$GITHUB_OUTPUT"
 
@@ -136,17 +136,17 @@ runs:
           echo "## LogDrop Taint"
           echo ""
           if [ "$findings" -eq 0 ]; then
-            echo "Bulgu yok."
+            echo "No findings."
           else
-            echo "**$findings bulgu.**"
+            echo "**$findings finding(s).**"
             echo ""
-            echo "| Konum | Kural | Bulgu |"
+            echo "| Location | Rule | Finding |"
             echo "|---|---|---|"
             sed -n 's/^  \[\([^]]*\)\] \([^ ]*\) — \(.*\)$/| `\2` | \1 | \3 |/p' scan-output.txt
           fi
         } >> "$GITHUB_STEP_SUMMARY"
 
-        # Bayrak çıkıştan ÖNCE yazılır ki --fail-on-findings ile çıksak da okunabilsin.
+        # The flag is written BEFORE exiting so it survives a --fail-on-findings exit.
         if [ -f "$SARIF_FILE" ]; then
           echo "sarif-written=true" >> "$GITHUB_OUTPUT"
         else
@@ -155,11 +155,11 @@ runs:
         rm -f scan-output.txt
         exit $status
 
-    # Code Scanning public depolarda ücretsiz, private depolarda ücretli bir
-    # lisansa bağlı. Lisansı olmayan bir müşteride yükleme adımı hata verir ve
-    # tarama BAŞARILI olduğu hâlde build'i kırardı. Yoklayıp uyarıyla geçiyoruz:
-    # bulgu raporlaması (satır içi kutular + iş özeti + çıkış kodu) etkilenmez.
-    - name: Code Scanning kullanılabilir mi
+    # Code Scanning is free on public repositories and depends on a paid licence on
+    # private ones. On a customer without one the upload step errors and would break
+    # the build even though the scan SUCCEEDED. So we probe and pass with a warning:
+    # finding reporting (inline boxes + job summary + exit code) is unaffected.
+    - name: Is Code Scanning available
       id: codescanning
       if: ${{ always() && inputs.upload-sarif == 'true' && steps.scan.outputs.sarif-written == 'true' }}
       shell: bash
@@ -173,30 +173,30 @@ runs:
         case "$code" in
           403|404)
             echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "::warning title=SARIF yüklenmedi::Code Scanning bu depoda kullanılamıyor (HTTP $code). Private depolarda bu özellik ücretli bir Code Security lisansı ister; iş akışında 'security-events: write' izni de gerekir. Tarama çalıştı — bulgular satır içi uyarılarda ve iş özetinde görünür."
+            echo "::warning title=SARIF not uploaded::Code Scanning is unavailable on this repository (HTTP $code). On private repositories it needs a paid Code Security licence, and your workflow needs the 'security-events: write' permission. The scan ran — the findings appear in the inline annotations and the job summary."
             ;;
           *) echo "available=true" >> "$GITHUB_OUTPUT" ;;
         esac
 
-    - name: SARIF'i Code Scanning'e yükle
+    - name: Upload the SARIF to Code Scanning
       if: ${{ always() && steps.codescanning.outputs.available == 'true' }}
       uses: github/codeql-action/upload-sarif@v3
       with:
         sarif_file: ${{ inputs.sarif-file }}
         category: logdrop-taint
 
-    # LogDrop paneline rapor gönderimi — İSTEĞE BAĞLI, varsayılan KAPALI.
+    # Reporting to the LogDrop panel — OPTIONAL, OFF by default.
     #
-    # Gizlilik: gönderilen tek şey SARIF'tir (kural + dosya + satır). Kaynak kod
-    # metni ne SARIF'e girer ne de gönderilir. Yine de dosya YOLLARI makineden
-    # çıkar; bu yüzden karar müşterinindir ve varsayılan kapalıdır.
+    # Privacy: the only thing sent is the SARIF (rule + file + line). The source text
+    # neither enters the SARIF nor gets sent. File PATHS do leave the machine, though,
+    # so the decision belongs to the customer and the default is off.
     #
-    # Ağ çağrısı ANALİZCİDE değil burada: ikili hiçbir sunucuya bağlanmaz,
-    # "program kimseye çalıştırıldım demez" sözü böyle korunuyor.
+    # The network call lives here, NOT in the analyzer: the binary contacts no server,
+    # which is how the promise "the program tells nobody it ran" is kept.
     #
-    # always(): fail-on-findings açıkken tarama adımı 1 ile çıkar. Rapor asıl
-    # o zaman gönderilmeli — bulgu varken.
-    - name: Paneli bilgilendir
+    # always(): with fail-on-findings the scan step exits 1. That is exactly when the
+    # report matters — when there are findings.
+    - name: Notify the panel
       if: ${{ always() && inputs.panel-url != '' && steps.scan.outputs.sarif-written == 'true' }}
       shell: bash
       working-directory: ${{ github.workspace }}
@@ -211,15 +211,15 @@ runs:
       run: |
         set -uo pipefail
         if [ -z "$BUNDLE_ID" ]; then
-          echo "::error title=bundle-id eksik::panel-url verildi ama bundle-id verilmedi. Panelde raporun hangi uygulamaya ait olduğu bundle-id ile belirlenir."
+          echo "::error title=bundle-id missing::panel-url was given but bundle-id was not. The panel uses bundle-id to decide which application a report belongs to."
           exit 1
         fi
 
         url="${PANEL_URL%/}/api/reports/sarif"
         body="$RUNNER_TEMP/panel-response.txt"
 
-        # `|| echo 000` YOK: curl bağlanamadığında -w zaten "000" yazar; ikisi
-        # birleşince kod "000000" olur ve "panele ulaşılamadı" dalı hiç çalışmaz.
+        # NO `|| echo 000`: when curl cannot connect, -w already prints "000"; combining
+        # the two yields "000000" and the "panel unreachable" branch never matches.
         code=$(curl -sS -o "$body" -w '%{http_code}' -X POST "$url" \
           -H "Authorization: Bearer $LICENSE" \
           -F "sarif=@$SARIF_FILE" \
@@ -229,37 +229,37 @@ runs:
           -F "commit=$COMMIT")
         code=${code:-000}
 
-        # Panel gönderimi build'i KIRMAZ. Tarama başarılı, bulgu raporlaması
-        # (satır içi uyarılar + iş özeti + çıkış kodu) zaten çalıştı; panel
-        # bakımdayken müşterinin PR'ının kırmızıya dönmesi bize yazılmış bir
-        # arıza olurdu. Sessiz de geçmiyoruz — uyarı düşüyor.
+        # Sending to the panel does NOT break the build. The scan succeeded and finding
+        # reporting (inline annotations + job summary + exit code) already ran; a
+        # customer's pull request turning red while the panel is under maintenance would
+        # be a fault charged to us. Nor do we pass silently — a warning is emitted.
         case "$code" in
           200|201)
-            echo "Panele gönderildi: $(head -c 300 "$body")"
+            echo "Sent to the panel: $(head -c 300 "$body")"
             ;;
           401)
-            echo "::warning title=Panel raporu gönderilemedi::Lisans anahtarı panel tarafından kabul edilmedi (401). Anahtarı kontrol edin."
+            echo "::warning title=Panel report not sent::The panel refused the licence key (401). Check the key."
             ;;
           403)
-            # 403 iki ayrı sebep taşıyabiliyor: süresi dolmuş VEYA iptal edilmiş.
-            # "Yenileyin" demek iptal durumunda yanıltıcı olur; panelin kendi
-            # açıklamasını gösterip müşteriyi satışa yönlendiriyoruz.
-            echo "::warning title=Panel raporu gönderilemedi::Panel lisansı kabul etmedi (403): $(head -c 300 "$body") — lisans süresi dolmuş ya da iptal edilmiş olabilir. satis@initialcode.io"
+            # A 403 can carry two causes: expired OR revoked. Saying "renew it" would be
+            # misleading for a revocation, so we show the panel's own explanation and
+            # point the customer at sales.
+            echo "::warning title=Panel report not sent::The panel refused the licence (403): $(head -c 300 "$body") — it may be expired or revoked. satis@initialcode.io"
             ;;
           400|422)
-            echo "::warning title=Panel raporu gönderilemedi::Panel isteği reddetti ($code). bundle-id ve SARIF dosyasını kontrol edin: $(head -c 300 "$body")"
+            echo "::warning title=Panel report not sent::The panel rejected the request ($code). Check bundle-id and the SARIF file: $(head -c 300 "$body")"
             ;;
           413)
-            echo "::warning title=Panel raporu gönderilemedi::SARIF paneldeki boyut sınırını aştı (413). Taramayı daraltmayı deneyin: .logdrop.json içindeki exclude ile Pods/ ve üretilmiş kodu eleyin."
+            echo "::warning title=Panel report not sent::The SARIF exceeded the panel size limit (413). Try narrowing the scan: use exclude in .logdrop.json to drop Pods/ and generated code."
             ;;
           503)
-            echo "::warning title=Panel raporu gönderilemedi::Panel şu an hizmet veremiyor (503). Tarama etkilenmedi; sonraki koşuda yeniden denenecek."
+            echo "::warning title=Panel report not sent::The panel is currently unavailable (503). The scan was unaffected; the next run will try again."
             ;;
           000)
-            echo "::warning title=Panel raporu gönderilemedi::Panele ulaşılamadı ($PANEL_URL). Tarama etkilenmedi."
+            echo "::warning title=Panel report not sent::The panel could not be reached ($PANEL_URL). The scan was unaffected."
             ;;
           *)
-            echo "::warning title=Panel raporu gönderilemedi::Panel $code döndü: $(head -c 300 "$body")"
+            echo "::warning title=Panel report not sent::The panel returned $code: $(head -c 300 "$body")"
             ;;
         esac
         rm -f "$body"

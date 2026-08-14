@@ -1,19 +1,19 @@
 # fastlane — LogDrop Taint
 #
-# Fastfile'ınıza ekleyin. Xcode derlemesinden ÖNCE koşturmak mantıklı: bulgu
-# varsa derlemeye zaman harcamadan durur.
+# Add this to your Fastfile. Running it BEFORE the Xcode build makes sense: with
+# findings it stops before you spend time compiling.
 #
-# LİSANS: LOGDROP_LICENSE ortam değişkeni (CI'da secret olarak) tanımlı olmalı.
+# LICENCE: the LOGDROP_LICENSE environment variable must be set (as a CI secret).
 
-desc "Kaynak kodda taint (veri akışı) taraması"
-lane :guvenlik_taramasi do
+desc "Taint (data-flow) scan over the source"
+lane :security_scan do
   bin_dir = File.expand_path("~/.logdrop/bin")
 
-  # Kurulum (zaten kuruluysa atlar)
+  # Install it (skipped if already installed)
   sh("LOGDROP_VERSION=v1.4.0 LOGDROP_BIN_DIR=#{bin_dir} bash #{__dir__}/../install-logdrop-taint.sh")
 
-  # Tarama. sh(...) sıfırdan farklı çıkışta hata fırlatır; kodu okuyup
-  # anlamlandırmak için elle yakalıyoruz — 1 (bulgu) ile 2 (lisans) aynı şey değil.
+  # The scan. sh(...) raises on a non-zero exit; we catch it by hand so the code can
+  # be read and acted on — 1 (findings) is not the same thing as 2 (licence).
   status = 0
   Dir.chdir(File.expand_path("..", __dir__ + "/../..")) do
     system(
@@ -26,10 +26,10 @@ lane :guvenlik_taramasi do
   end
 
   case status
-  when 0 then UI.success("LogDrop Taint: bulgu yok.")
-  when 1 then UI.user_error!("LogDrop Taint bulgu buldu — rapor: logdrop-taint.sarif")
-  when 2 then UI.user_error!("LogDrop lisansı geçersiz ya da süresi dolmuş.")
-  when 3 then UI.user_error!(".logdrop.json ayar dosyasında hata var.")
-  else        UI.user_error!("LogDrop Taint beklenmeyen çıkış kodu: #{status}")
+  when 0 then UI.success("LogDrop Taint: no findings.")
+  when 1 then UI.user_error!("LogDrop Taint reported findings — see logdrop-taint.sarif")
+  when 2 then UI.user_error!("The LogDrop licence is invalid or expired.")
+  when 3 then UI.user_error!("There is an error in the .logdrop.json config file.")
+  else        UI.user_error!("LogDrop Taint returned an unexpected exit code: #{status}")
   end
 end

@@ -1,29 +1,29 @@
 # CircleCI — LogDrop Taint
 #
-# Bu dosyayı projenizin .circleci/config.yml dosyasına uyarlayın.
+# Adapt this into your project's .circleci/config.yml.
 #
-# GEREKSİNİM: macOS executor. CircleCI'da macOS ücretli planlara dahildir; zaten
-# iOS derliyorsanız kullanıyorsunuz demektir ve tarama o işin içine eklenir,
-# ayrı bir makine gerektirmez.
+# REQUIREMENT: a macOS executor. On CircleCI macOS comes with the paid plans; if you
+# already build iOS you are using one, and the scan slots into that job rather than
+# needing a machine of its own.
 #
-# LİSANS: CircleCI proje ayarlarında `LOGDROP_LICENSE` adında bir ortam değişkeni
-# tanımlayın (Project Settings → Environment Variables). Anahtarı config'e YAZMAYIN.
+# LICENCE: define an environment variable named `LOGDROP_LICENSE` in the CircleCI
+# project settings (Project Settings → Environment Variables). Do NOT put it in config.
 version: 2.1
 
 jobs:
-  guvenlik-taramasi:
+  security-scan:
     macos:
       xcode: "16.0"
     steps:
       - checkout
 
-      # İkiliyi sürüme göre önbelleğe al: her koşuda yeniden indirmeye gerek yok.
+      # Cache the binary per version: no need to download it on every run.
       - restore_cache:
           keys:
             - logdrop-taint-v1.4.0
 
       - run:
-          name: LogDrop Taint kurulumu
+          name: Install LogDrop Taint
           command: |
             LOGDROP_VERSION=v1.4.0 \
             LOGDROP_BIN_DIR="$HOME/.logdrop/bin" \
@@ -35,23 +35,23 @@ jobs:
             - ~/.logdrop/bin
 
       - run:
-          name: Kaynak taraması
+          name: Scan the source
           command: |
             "$HOME/.logdrop/bin/logdrop-taint" Sources \
               --sarif logdrop-taint.sarif \
               --repo-root "$PWD" \
               --verbose \
               --fail-on-findings
-          # Çıkış kodu 1 ise bulgu var → adım kırılır → PR birleştirilemez.
-          # 2 lisans, 3 ayar dosyası hatası. Üçü ayrı anlam taşır.
+          # Exit code 1 means findings → the step fails → the pull request is blocked.
+          # 2 is the licence, 3 is a config error. Each means something different.
 
-      # Rapor her hâlükârda saklansın: bulgu varsa adım kırıldı ama raporu
-      # görmek isteyeceksiniz.
+      # Keep the report either way: with findings the step failed, and that is exactly
+      # when you want to read it.
       - store_artifacts:
           path: logdrop-taint.sarif
           destination: logdrop-taint.sarif
 
 workflows:
-  guvenlik:
+  security:
     jobs:
-      - guvenlik-taramasi
+      - security-scan
