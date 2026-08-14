@@ -1,0 +1,32 @@
+# GitLab CI — LogDrop Taint
+#
+# GEREKSİNİM: macOS runner. GitLab'ın SaaS macOS runner'ları ücretlidir; kendi
+# Mac'inizi runner olarak kaydederseniz ek ücret ödemezsiniz (iOS ekipleri
+# genelde zaten öyle yapar).
+#
+# LİSANS: Settings → CI/CD → Variables altında `LOGDROP_LICENSE` tanımlayın ve
+# "Masked" işaretleyin. Anahtarı bu dosyaya YAZMAYIN.
+guvenlik-taramasi:
+  stage: test
+  tags:
+    - macos            # kendi macOS runner'ınızın etiketi
+  variables:
+    LOGDROP_VERSION: "v1.4.0"
+    LOGDROP_BIN_DIR: "$CI_PROJECT_DIR/.logdrop/bin"
+  cache:
+    key: "logdrop-taint-$LOGDROP_VERSION"
+    paths:
+      - .logdrop/bin/
+  script:
+    - bash examples/install-logdrop-taint.sh
+    - |
+      "$LOGDROP_BIN_DIR/logdrop-taint" Sources \
+        --sarif logdrop-taint.sarif \
+        --repo-root "$CI_PROJECT_DIR" \
+        --verbose \
+        --fail-on-findings
+  artifacts:
+    when: always          # bulgu varsa iş kırılır; raporu yine de sakla
+    paths:
+      - logdrop-taint.sarif
+    expire_in: 30 days

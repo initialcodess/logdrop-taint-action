@@ -67,6 +67,10 @@ Nerede işinize yarar:
 `--sarif` çıktısı standart SARIF 2.1.0'dır; Xcode'da veya VS Code'un SARIF
 görüntüleyicisinde açabilir, kendi panelinize aktarabilirsiniz.
 
+**Hazır tarifler:** [`examples/`](examples/) altında CircleCI, GitLab CI, Jenkins,
+Bitrise, fastlane, Xcode build fazı ve yerel makine için çalışır durumda örnekler
+var — hepsi aynı kurulum betiğini kullanıyor.
+
 ## Bulguları nerede görürsünüz
 
 Üçü de **ücretsizdir ve her GitHub planında** çalışır:

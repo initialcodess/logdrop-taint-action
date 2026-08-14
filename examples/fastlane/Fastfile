@@ -1,0 +1,35 @@
+# fastlane — LogDrop Taint
+#
+# Fastfile'ınıza ekleyin. Xcode derlemesinden ÖNCE koşturmak mantıklı: bulgu
+# varsa derlemeye zaman harcamadan durur.
+#
+# LİSANS: LOGDROP_LICENSE ortam değişkeni (CI'da secret olarak) tanımlı olmalı.
+
+desc "Kaynak kodda taint (veri akışı) taraması"
+lane :guvenlik_taramasi do
+  bin_dir = File.expand_path("~/.logdrop/bin")
+
+  # Kurulum (zaten kuruluysa atlar)
+  sh("LOGDROP_VERSION=v1.4.0 LOGDROP_BIN_DIR=#{bin_dir} bash #{__dir__}/../install-logdrop-taint.sh")
+
+  # Tarama. sh(...) sıfırdan farklı çıkışta hata fırlatır; kodu okuyup
+  # anlamlandırmak için elle yakalıyoruz — 1 (bulgu) ile 2 (lisans) aynı şey değil.
+  status = 0
+  Dir.chdir(File.expand_path("..", __dir__ + "/../..")) do
+    system(
+      "#{bin_dir}/logdrop-taint", "Sources",
+      "--sarif", "logdrop-taint.sarif",
+      "--repo-root", Dir.pwd,
+      "--verbose", "--fail-on-findings"
+    )
+    status = $?.exitstatus
+  end
+
+  case status
+  when 0 then UI.success("LogDrop Taint: bulgu yok.")
+  when 1 then UI.user_error!("LogDrop Taint bulgu buldu — rapor: logdrop-taint.sarif")
+  when 2 then UI.user_error!("LogDrop lisansı geçersiz ya da süresi dolmuş.")
+  when 3 then UI.user_error!(".logdrop.json ayar dosyasında hata var.")
+  else        UI.user_error!("LogDrop Taint beklenmeyen çıkış kodu: #{status}")
+  end
+end

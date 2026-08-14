@@ -1,0 +1,57 @@
+# CircleCI — LogDrop Taint
+#
+# Bu dosyayı projenizin .circleci/config.yml dosyasına uyarlayın.
+#
+# GEREKSİNİM: macOS executor. CircleCI'da macOS ücretli planlara dahildir; zaten
+# iOS derliyorsanız kullanıyorsunuz demektir ve tarama o işin içine eklenir,
+# ayrı bir makine gerektirmez.
+#
+# LİSANS: CircleCI proje ayarlarında `LOGDROP_LICENSE` adında bir ortam değişkeni
+# tanımlayın (Project Settings → Environment Variables). Anahtarı config'e YAZMAYIN.
+version: 2.1
+
+jobs:
+  guvenlik-taramasi:
+    macos:
+      xcode: "16.0"
+    steps:
+      - checkout
+
+      # İkiliyi sürüme göre önbelleğe al: her koşuda yeniden indirmeye gerek yok.
+      - restore_cache:
+          keys:
+            - logdrop-taint-v1.4.0
+
+      - run:
+          name: LogDrop Taint kurulumu
+          command: |
+            LOGDROP_VERSION=v1.4.0 \
+            LOGDROP_BIN_DIR="$HOME/.logdrop/bin" \
+            bash examples/install-logdrop-taint.sh
+
+      - save_cache:
+          key: logdrop-taint-v1.4.0
+          paths:
+            - ~/.logdrop/bin
+
+      - run:
+          name: Kaynak taraması
+          command: |
+            "$HOME/.logdrop/bin/logdrop-taint" Sources \
+              --sarif logdrop-taint.sarif \
+              --repo-root "$PWD" \
+              --verbose \
+              --fail-on-findings
+          # Çıkış kodu 1 ise bulgu var → adım kırılır → PR birleştirilemez.
+          # 2 lisans, 3 ayar dosyası hatası. Üçü ayrı anlam taşır.
+
+      # Rapor her hâlükârda saklansın: bulgu varsa adım kırıldı ama raporu
+      # görmek isteyeceksiniz.
+      - store_artifacts:
+          path: logdrop-taint.sarif
+          destination: logdrop-taint.sarif
+
+workflows:
+  guvenlik:
+    jobs:
+      - guvenlik-taramasi

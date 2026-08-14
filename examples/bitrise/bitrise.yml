@@ -1,0 +1,38 @@
+# Bitrise — LogDrop Taint
+#
+# Bitrise zaten macOS yığınında çalışır, yani ek bir gereksinim yok.
+#
+# LİSANS: Bitrise'da Secrets bölümüne `LOGDROP_LICENSE` ekleyin ("Expose for pull
+# requests" seçeneğini kapalı tutmayı düşünün — fork PR'larına sır vermek risklidir).
+format_version: "13"
+default_step_lib_source: https://github.com/bitrise-io/bitrise-steplib.git
+
+workflows:
+  guvenlik-taramasi:
+    envs:
+      - LOGDROP_VERSION: v1.4.0
+      - LOGDROP_BIN_DIR: $BITRISE_SOURCE_DIR/.logdrop/bin
+    steps:
+      - activate-ssh-key: {}
+      - git-clone: {}
+      - cache-pull: {}
+      - script:
+          title: LogDrop Taint kurulumu
+          inputs:
+            - content: bash examples/install-logdrop-taint.sh
+      - script:
+          title: Kaynak taraması
+          inputs:
+            - content: |
+                #!/usr/bin/env bash
+                set -euo pipefail
+                "$LOGDROP_BIN_DIR/logdrop-taint" Sources \
+                  --sarif "$BITRISE_DEPLOY_DIR/logdrop-taint.sarif" \
+                  --repo-root "$BITRISE_SOURCE_DIR" \
+                  --verbose \
+                  --fail-on-findings
+      - cache-push:
+          inputs:
+            - cache_paths: $LOGDROP_BIN_DIR
+      - deploy-to-bitrise-io:
+          is_always_run: true      # bulgu varsa adım kırıldı; raporu yine de yükle

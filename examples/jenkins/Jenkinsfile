@@ -1,0 +1,46 @@
+// Jenkins — LogDrop Taint
+//
+// GEREKSİNİM: macOS etiketli bir agent. Kendi Mac mini'niz yeterli; Xcode ya da
+// Swift kurulumu GEREKMEZ (analizci kendi kendine yeten bir ikilidir).
+//
+// LİSANS: Jenkins credentials'a `logdrop-license` adıyla "Secret text" olarak
+// ekleyin. Anahtarı bu dosyaya YAZMAYIN.
+pipeline {
+  agent { label 'macos' }
+
+  environment {
+    LOGDROP_VERSION = 'v1.4.0'
+    LOGDROP_BIN_DIR = "${WORKSPACE}/.logdrop/bin"
+  }
+
+  stages {
+    stage('LogDrop Taint kurulumu') {
+      steps {
+        sh 'bash examples/install-logdrop-taint.sh'
+      }
+    }
+
+    stage('Kaynak taraması') {
+      steps {
+        withCredentials([string(credentialsId: 'logdrop-license', variable: 'LOGDROP_LICENSE')]) {
+          // Çıkış kodu 1 ise bulgu var → build FAILURE olur.
+          // 2 lisans sorunu, 3 ayar dosyası hatası — ayırt edilebilsin diye ayrı.
+          sh '''
+            "$LOGDROP_BIN_DIR/logdrop-taint" Sources \
+              --sarif logdrop-taint.sarif \
+              --repo-root "$WORKSPACE" \
+              --verbose \
+              --fail-on-findings
+          '''
+        }
+      }
+    }
+  }
+
+  post {
+    always {
+      // Bulgu varsa aşama kırıldı; rapor yine de arşivlensin.
+      archiveArtifacts artifacts: 'logdrop-taint.sarif', allowEmptyArchive: true
+    }
+  }
+}
