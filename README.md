@@ -37,6 +37,36 @@ jobs:
 `macos-15` gerekir (Swift 6+). Analizci hazır derlenmiş indirilir — projenizde
 Swift derlemesi yapılmaz.
 
+## GitHub'sız kullanım (kendi makinenizde / kendi sunucunuzda)
+
+Analizci **tek bir çalıştırılabilir dosyadır** ve yalnız macOS ister — Xcode,
+Swift kurulumu, Homebrew, hiçbiri gerekmez. Yani GitHub Actions'a bağlı değilsiniz:
+
+```bash
+# Bir kez indirin (sürümü değiştirebilirsiniz)
+V=v1.4.0
+curl -fsSL -O "https://github.com/initialcodess/logdrop-taint-action/releases/download/$V/logdrop-taint-$V-macos-universal.tar.gz"
+curl -fsSL -O "https://github.com/initialcodess/logdrop-taint-action/releases/download/$V/logdrop-taint-$V-macos-universal.tar.gz.sha256"
+shasum -a 256 -c "logdrop-taint-$V-macos-universal.tar.gz.sha256"   # bütünlük
+tar -xzf "logdrop-taint-$V-macos-universal.tar.gz"
+
+# Çalıştırın
+export LOGDROP_LICENSE="LOGDROP...."
+./logdrop-taint Sources --sarif rapor.sarif --verbose --fail-on-findings
+```
+
+Nerede işinize yarar:
+
+- **Geliştirici makinesinde** — push etmeden önce kendi kodunuzu tarayın.
+- **Kendi build sunucunuzda** (Jenkins, TeamCity, Bitrise, kendi Mac mini'niz):
+  yukarıdaki iki satırı build adımınıza koyun. Çıkış kodu `1` ise bulgu var.
+- **fastlane / Xcode Run Script fazı** — aynı ikili, aynı çıkış kodu.
+- **Kendi barındırdığınız GitHub runner'ında** — bu Action olduğu gibi çalışır ve
+  GitHub'ın dakika ücreti işlemez.
+
+`--sarif` çıktısı standart SARIF 2.1.0'dır; Xcode'da veya VS Code'un SARIF
+görüntüleyicisinde açabilir, kendi panelinize aktarabilirsiniz.
+
 ## Bulguları nerede görürsünüz
 
 Üçü de **ücretsizdir ve her GitHub planında** çalışır:
