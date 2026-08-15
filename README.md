@@ -121,6 +121,15 @@ across scans, you can send the report to the panel:
 **Off by default.** Without `panel-url` nothing is sent and the scan stays entirely
 local.
 
+Not on GitHub Actions? Every recipe under [`examples/`](examples/) ends by calling
+[`examples/report-to-panel.sh`](examples/report-to-panel.sh), which does the same
+POST from CircleCI, GitLab, Jenkins, Bitrise, fastlane or a laptop. It does nothing
+until you set `PANEL_URL`, and it never fails a build.
+
+The analyzer itself still contacts nothing: sending is a separate step on a report
+that already exists, which is what keeps "the scanner never phones home" true
+wherever you run it.
+
 When it is sent, the only thing that goes is the **SARIF**: rule id, file path, line
 number and (if enabled) the code of the offending line — so the panel can show the
 faulty code with the relevant line highlighted. Turn the snippets off with

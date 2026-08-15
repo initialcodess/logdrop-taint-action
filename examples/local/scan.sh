@@ -28,6 +28,10 @@ set +e
 status=$?
 set -e
 
+# Send it on, if a panel is configured. Nothing happens without PANEL_URL, so this
+# line is harmless on a laptop that only ever scans locally.
+"$HERE/../report-to-panel.sh" logdrop-taint.sarif
+
 # The exit codes mean different things — say which one it is in plain language.
 case $status in
   0) echo; echo "Clean: no findings." ;;

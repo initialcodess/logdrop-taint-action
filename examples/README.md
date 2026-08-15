@@ -15,6 +15,25 @@ The first two live in [`install-logdrop-taint.sh`](install-logdrop-taint.sh), an
 every recipe below calls it. On GitHub Actions you do not even need that — the
 action does both for you.
 
+## Sending the report to the panel
+
+Optional, and off until you switch it on. Every recipe here ends by calling
+[`report-to-panel.sh`](report-to-panel.sh); without `PANEL_URL` set it prints one
+line and does nothing, so the step is safe to leave in place. Set `PANEL_URL` and
+`BUNDLE_ID` in whatever your CI uses for configuration and reports start arriving —
+no edit to the recipe.
+
+**The analyzer itself never contacts anything.** It verifies its licence offline,
+counts no usage and does not report that it ran. Sending is a separate step, on a
+report that already exists, run by you — which is why it is a script you can read
+rather than a flag inside the binary.
+
+Sending never fails a build. The scan's exit code already said what it found; a
+panel under maintenance must not turn that red afterwards.
+
+Which customer a report belongs to comes from your **licence key**, not from
+anything the recipe sends.
+
 ## Exit codes — the contract every integration rests on
 
 | Code | Meaning | What CI should do |

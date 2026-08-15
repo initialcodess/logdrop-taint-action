@@ -25,6 +25,12 @@ security-scan:
         --repo-root "$CI_PROJECT_DIR" \
         --verbose \
         --fail-on-findings
+  after_script:
+    # Runs whether the scan passed or failed. Does nothing unless PANEL_URL is set
+    # under Settings -> CI/CD -> Variables.
+    - |
+      APP_NAME="$CI_PROJECT_NAME" VERSION="$CI_COMMIT_REF_NAME" COMMIT="$CI_COMMIT_SHA" \
+        bash examples/report-to-panel.sh logdrop-taint.sarif
   artifacts:
     when: always          # findings fail the job; keep the report regardless
     paths:

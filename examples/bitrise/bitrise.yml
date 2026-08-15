@@ -31,6 +31,16 @@ workflows:
                   --repo-root "$BITRISE_SOURCE_DIR" \
                   --verbose \
                   --fail-on-findings
+      - script:
+          title: Report to the LogDrop panel
+          is_always_run: true
+          inputs:
+            - content: |
+                #!/usr/bin/env bash
+                # Does nothing unless PANEL_URL is set in Secrets.
+                APP_NAME="$BITRISE_APP_TITLE" VERSION="$BITRISE_GIT_BRANCH" \
+                COMMIT="$BITRISE_GIT_COMMIT" \
+                  bash examples/report-to-panel.sh "$BITRISE_DEPLOY_DIR/logdrop-taint.sarif"
       - cache-push:
           inputs:
             - cache_paths: $LOGDROP_BIN_DIR

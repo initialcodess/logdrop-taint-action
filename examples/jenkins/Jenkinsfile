@@ -41,6 +41,15 @@ pipeline {
     always {
       // With findings the stage failed; archive the report anyway.
       archiveArtifacts artifacts: 'logdrop-taint.sarif', allowEmptyArchive: true
+
+      // And send it on, if a panel is configured. Without PANEL_URL this prints a
+      // line and does nothing, so it is safe to leave in.
+      withCredentials([string(credentialsId: 'logdrop-license', variable: 'LOGDROP_LICENSE')]) {
+        sh '''
+          APP_NAME="$JOB_NAME" VERSION="$BRANCH_NAME" COMMIT="$GIT_COMMIT" \
+            bash examples/report-to-panel.sh logdrop-taint.sarif
+        '''
+      }
     }
   }
 }

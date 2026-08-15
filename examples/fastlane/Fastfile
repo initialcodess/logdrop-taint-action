@@ -25,6 +25,10 @@ lane :security_scan do
     status = $?.exitstatus
   end
 
+  # Send the report on before acting on the exit code, so a failing scan still
+  # reaches the panel. Does nothing unless PANEL_URL is set.
+  sh("bash #{__dir__}/../report-to-panel.sh logdrop-taint.sarif")
+
   case status
   when 0 then UI.success("LogDrop Taint: no findings.")
   when 1 then UI.user_error!("LogDrop Taint reported findings — see logdrop-taint.sarif")

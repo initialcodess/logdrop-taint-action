@@ -45,6 +45,19 @@ jobs:
           # Exit code 1 means findings → the step fails → the pull request is blocked.
           # 2 is the licence, 3 is a config error. Each means something different.
 
+      # Send it to the panel, if you use one. Runs even though the scan step failed:
+      # a report with findings is the one that matters most. Without PANEL_URL set
+      # in the project's environment variables this step prints a line and does
+      # nothing, so it is safe to leave in.
+      - run:
+          name: Report to the LogDrop panel
+          when: always
+          command: |
+            PANEL_URL="${PANEL_URL:-}" BUNDLE_ID="${BUNDLE_ID:-}" \
+            APP_NAME="$CIRCLE_PROJECT_REPONAME" \
+            VERSION="$CIRCLE_BRANCH" COMMIT="$CIRCLE_SHA1" \
+              bash examples/report-to-panel.sh logdrop-taint.sarif
+
       # Keep the report either way: with findings the step failed, and that is exactly
       # when you want to read it.
       - store_artifacts:
