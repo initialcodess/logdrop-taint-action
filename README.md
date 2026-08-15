@@ -44,7 +44,7 @@ toolchain, no Homebrew. So you are not tied to GitHub Actions:
 
 ```bash
 # Download it once (change the version as needed)
-V=v1.6.0
+V=v1.7.0
 curl -fsSL -O "https://github.com/initialcodess/logdrop-taint-action/releases/download/$V/logdrop-taint-$V-macos-universal.tar.gz"
 curl -fsSL -O "https://github.com/initialcodess/logdrop-taint-action/releases/download/$V/logdrop-taint-$V-macos-universal.tar.gz.sha256"
 shasum -a 256 -c "logdrop-taint-$V-macos-universal.tar.gz.sha256"   # integrity
@@ -89,9 +89,10 @@ it **does not break the build**.
 
 | Scenario | CWE |
 |---|---|
-| User or network data reaches `WKWebView` unsanitised | CWE-79 |
+| User, network or deep-link data reaches `WKWebView` unsanitised | CWE-79 |
 | A key hardcoded in the source reaches a crypto API | CWE-321 |
 | Personal data (email, phone, password, card number, PIN) is written to a log | CWE-532 |
+| Credentials are written into a local database instead of the Keychain | CWE-312 |
 
 What a value is also comes from the name it is read from: `cvvTextField.text` is a
 CVV, while `searchTextField.text` is only user input and produces nothing — logging
