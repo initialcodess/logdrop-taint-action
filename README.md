@@ -44,7 +44,7 @@ toolchain, no Homebrew. So you are not tied to GitHub Actions:
 
 ```bash
 # Download it once (change the version as needed)
-V=v1.4.0
+V=v1.5.0
 curl -fsSL -O "https://github.com/initialcodess/logdrop-taint-action/releases/download/$V/logdrop-taint-$V-macos-universal.tar.gz"
 curl -fsSL -O "https://github.com/initialcodess/logdrop-taint-action/releases/download/$V/logdrop-taint-$V-macos-universal.tar.gz.sha256"
 shasum -a 256 -c "logdrop-taint-$V-macos-universal.tar.gz.sha256"   # integrity
@@ -91,7 +91,11 @@ it **does not break the build**.
 |---|---|
 | User or network data reaches `WKWebView` unsanitised | CWE-79 |
 | A key hardcoded in the source reaches a crypto API | CWE-321 |
-| Personal data (email, phone, password, national ID) is written to a log | CWE-532 |
+| Personal data (email, phone, password, card number, PIN) is written to a log | CWE-532 |
+
+What a value is also comes from the name it is read from: `cvvTextField.text` is a
+CVV, while `searchTextField.text` is only user input and produces nothing — logging
+your own search term is not a leak.
 
 It follows flows across functions too, and does not report data that passed through
 a sanitiser such as `escapeHTML(...)`. Sanitising is **label-specific**: escaping
@@ -132,11 +136,12 @@ Put a `.logdrop.json` at your repository root to adapt the rules to your project
 
 ```json
 {
-  "sanitizers": { "makeSafe": ["user-input"], "maskEmail": ["pii"] },
-  "sources":    { "nationalId": "pii", "customerEmail": "pii" },
-  "sinks":      { "secret": { "rule": "SWIFT-TAINT-PII-LOG", "accepts": ["pii"] } },
-  "passthrough": ["normalise"],
-  "exclude":     ["Pods/", "Generated/", "Tests/"]
+  "sanitizers":     { "makeSafe": ["user-input"], "maskEmail": ["pii"] },
+  "sources":        { "nationalId": "pii", "customerEmail": "pii" },
+  "sensitiveNames": { "sifre": "pii", "kartNo": "pii" },
+  "sinks":          { "secret": { "rule": "SWIFT-TAINT-PII-LOG", "accepts": ["pii"] } },
+  "passthrough":    ["normalise"],
+  "exclude":        ["Pods/", "Generated/", "Tests/"]
 }
 ```
 
@@ -144,6 +149,7 @@ Put a `.logdrop.json` at your repository root to adapt the rules to your project
 |---|---|
 | `sanitizers` | Your own sanitising function; state which kind of taint it removes. No finding is produced past it. |
 | `sources` | Your own personal-data fields (`nationalId` and the like). |
+| `sensitiveNames` | Your own names for sensitive inputs. A value read from a name listed here counts as personal data — useful when your fields are not in English. |
 | `sinks` | Your own wrapper (your logging class, say) — state which rule it maps to. |
 | `passthrough` | Your own helpers that transform data but preserve taint. |
 | `exclude` | Paths to skip (`Pods/` etc.). A path is skipped if it contains the fragment. |
