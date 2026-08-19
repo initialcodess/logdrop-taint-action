@@ -79,7 +79,7 @@ in entirely the wrong place if you tell them their code is insecure.
 | **Jenkins** | [`jenkins/Jenkinsfile`](jenkins/Jenkinsfile) | An agent labelled `macos` |
 | **Bitrise** | [`bitrise/bitrise.yml`](bitrise/bitrise.yml) | Already a macOS stack; nothing extra needed |
 | **fastlane** | [`fastlane/Fastfile`](fastlane/Fastfile) | Run it before the build |
-| **Xcode** | [`xcode/run-script-phase.sh`](xcode/run-script-phase.sh) | Findings appear as Xcode warnings |
+| **Xcode** | [`xcode/run-script-phase.sh`](xcode/run-script-phase.sh) | Findings appear as Xcode warnings — [setup below](#in-xcode) |
 | **Your own machine** | [`local/scan.sh`](local/scan.sh) | Scan your code before you push |
 
 ## Where the licence key goes
@@ -109,3 +109,62 @@ machine is one you already have.
 **A note on cost:** cloud providers bill macOS noticeably higher than Linux (~10x
 on GitHub). A scan takes seconds, so the extra is small — and it drops to **zero**
 if you use your own Mac as a runner, which most iOS teams already have.
+
+## In Xcode
+
+The scan runs on every build and findings appear as warnings against the lines that
+caused them, so you see a leak while you are still writing it.
+
+1. Copy [`xcode/run-script-phase.sh`](xcode/run-script-phase.sh) to
+   `~/.logdrop/xcode-scan.sh` and make it executable.
+2. In Xcode, select the project, pick your target, open **Build Phases**.
+3. **+** → **New Run Script Phase**.
+4. Paste: `bash "$HOME/.logdrop/xcode-scan.sh"`
+5. Drag the phase **above Compile Sources**, so it runs before the build.
+6. Leave **Based on dependency analysis** unticked. Ticked, Xcode decides the inputs
+   have not changed and skips the scan without telling you.
+
+Put your key in `~/.logdrop/license` once and the phase finds it; there is no key to
+paste into Xcode.
+
+### Knowing it ran
+
+- Warnings appear next to the code, and in the issue navigator (⌘5).
+- The build log (⌘9 → *Run custom shell script 'LogDrop Taint'*) ends with
+  `LogDrop Taint: N finding(s).` **That line is the proof.** No line at all means the
+  phase did not run.
+- Nothing fails silently: a missing binary, a missing key and an expired licence each
+  print their own warning.
+
+### It never fails your build
+
+On your own machine this is a warning layer. The gate belongs in CI, where
+`--fail-on-findings` blocks the merge. A scan that broke the build every time you
+typed a half-finished line would be turned off within a day.
+
+### Scanning less
+
+A whole project is scanned by default, which on a large one is noticeable on every
+build. Point it at a folder instead:
+
+```
+SCAN_PATH="$SRCROOT/Sources" bash "$HOME/.logdrop/xcode-scan.sh"
+```
+
+### Sending to the panel from Xcode — usually don't
+
+The phase can send its report, if you give it `PANEL_URL` and `BUNDLE_ID`. It is off
+by default, and that is the recommendation:
+
+```
+PANEL_URL="https://panel.example.com" BUNDLE_ID="com.company.app" \
+  bash "$HOME/.logdrop/xcode-scan.sh"
+```
+
+Turned on, **every build** publishes your working copy — half-finished code, code you
+are about to delete, an experiment. Your colleagues open the panel and ask why it is
+red. The panel should hold what the team agreed on, and that comes from committed
+code through CI, not from somebody's editor.
+
+Worth turning on in one case: you work alone, you have no CI, and the panel is the
+only place you want history.
