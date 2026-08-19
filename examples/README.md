@@ -28,8 +28,17 @@ counts no usage and does not report that it ran. Sending is a separate step, on 
 report that already exists, run by you — which is why it is a script you can read
 rather than a flag inside the binary.
 
-Sending never fails a build. The scan's exit code already said what it found; a
-panel under maintenance must not turn that red afterwards.
+**A rejected report fails the build; a panel that is down does not.** If the panel
+refuses the report — the usual cause is a `BUNDLE_ID` not registered for your
+project — the step exits non-zero and you see it. A step that stayed green while no
+report ever arrived is the failure nobody notices until someone asks why the
+dashboard is empty.
+
+If the panel is unreachable, under maintenance, or simply not configured, the step
+exits 0 and your build is untouched. The scan's exit code already said what it
+found, and a maintenance window on our side must not turn your green build red an
+hour later. An expired or revoked licence is in this second group too: the
+developer who pushed the commit cannot fix it, so it warns rather than blocks.
 
 Which customer a report belongs to comes from your **licence key**, not from
 anything the recipe sends.

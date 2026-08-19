@@ -23,8 +23,21 @@
 # the step unconditionally: a customer who never sets PANEL_URL never sends
 # anything, and one who sets it needs no further edits.
 #
-# IT NEVER FAILS YOUR BUILD. The scan already ran and its exit code already said
-# what it found; a panel under maintenance must not turn that red afterwards.
+# EXIT CODE: whose problem is it?
+#
+#   Something you can fix   → 1, and your build goes red.
+#   Something we broke, or  → 0, and your build is untouched.
+#   a panel that is simply
+#   not configured
+#
+# A wrong bundle id is the first kind. The panel refuses the report, nothing is
+# stored, and if this script stayed quiet about it the step would sit there green
+# while no report ever arrived — the failure mode nobody notices until someone asks
+# why the dashboard is empty. So a rejection is a red build.
+#
+# A panel that is down, unreachable, or not configured at all is the second kind.
+# The scan already ran and its exit code already said what it found; a maintenance
+# window on our side must not turn a customer's green build red an hour later.
 set -uo pipefail
 
 SARIF="${1:-logdrop-taint.sarif}"
@@ -76,34 +89,50 @@ CODE=${CODE:-000}
 case "$CODE" in
   200|201)
     echo "LogDrop: report sent to the panel."
-    ;;
-  401)
-    echo "LogDrop: the panel refused the licence key (401). Check the key." >&2
-    ;;
-  403)
-    # Two different causes wear this code: expired, and revoked. "Renew it" is
-    # wrong advice for a revocation, so the panel's own words are shown instead.
-    echo "LogDrop: the panel refused the licence (403): $(head -c 300 "$BODY")" >&2
-    echo "        It may be expired or revoked — satis@initialcode.io" >&2
+    exit 0
     ;;
   400|422)
-    echo "LogDrop: the panel rejected the request ($CODE): $(head -c 300 "$BODY")" >&2
-    echo "        Check BUNDLE_ID and the SARIF file." >&2
+    # The usual cause is a bundle id that is not registered for this project. The
+    # panel says which one it did not recognise; it does not list the ones it knows,
+    # on purpose — a CI log is not always private.
+    echo "LogDrop: the panel rejected the report ($CODE): $(head -c 300 "$BODY")" >&2
+    echo "        Check BUNDLE_ID. Nothing was stored." >&2
+    exit 1
+    ;;
+  401)
+    # A key the panel cannot read at all: the wrong secret, or one mangled in
+    # copying. Whoever configured it can fix it, so it is worth stopping for.
+    echo "LogDrop: the panel could not read the licence key (401)." >&2
+    echo "        Check LOGDROP_LICENSE — a line break in the value is the usual cause." >&2
+    exit 1
     ;;
   413)
     echo "LogDrop: the report exceeded the panel's size limit (413)." >&2
     echo "        Narrow the scan with 'exclude' in .logdrop.json." >&2
+    exit 1
+    ;;
+  403)
+    # Deliberately NOT a failure, unlike its 4xx neighbours. A 403 means the key is
+    # recognised but no longer permitted — expired, or revoked. That is a commercial
+    # matter between two companies, and the developer who pushed this commit can do
+    # nothing about it. Failing their build over it punishes the wrong person, and
+    # the analyzer already refuses to run on an expired key (exit 2) long before the
+    # report gets this far.
+    echo "LogDrop: the panel did not accept the licence (403): $(head -c 300 "$BODY")" >&2
+    echo "        It may be expired or revoked — satis@initialcode.io" >&2
+    exit 0
     ;;
   503)
     echo "LogDrop: the panel is unavailable (503). The scan was unaffected." >&2
+    exit 0
     ;;
   000)
     echo "LogDrop: the panel could not be reached ($PANEL_URL). The scan was unaffected." >&2
+    exit 0
     ;;
   *)
+    # An unfamiliar code is not evidence that the customer did anything wrong.
     echo "LogDrop: the panel returned $CODE: $(head -c 300 "$BODY")" >&2
+    exit 0
     ;;
 esac
-
-# Always 0. What the scan found was decided by the scan.
-exit 0
