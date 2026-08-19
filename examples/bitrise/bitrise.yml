@@ -4,6 +4,18 @@
 #
 # LICENCE: add `LOGDROP_LICENSE` under Secrets in Bitrise (consider leaving "Expose
 # for pull requests" off — handing secrets to fork pull requests is risky).
+#
+# SENDING TO THE PANEL (optional) — three variables, and all three are needed:
+#
+#   PANEL_URL        your panel's address
+#   LOGDROP_LICENSE  your key (already required for the scan)
+#   BUNDLE_ID        your application's bundle id, AS REGISTERED IN THE PANEL
+#
+# Miss any one and nothing is sent: the step prints a line and stays green,
+# which is easy not to notice. A BUNDLE_ID the panel does not recognise for
+# this project is refused (400) and FAILS the step, so a wrong id is loud
+# rather than silent.
+# Set all three under Secrets, next to the licence key.
 format_version: "13"
 default_step_lib_source: https://github.com/bitrise-io/bitrise-steplib.git
 
