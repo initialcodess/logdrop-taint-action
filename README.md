@@ -121,13 +121,18 @@ across scans, you can send the report to the panel:
 **Off by default.** Without `panel-url` nothing is sent and the scan stays entirely
 local.
 
+Sending needs three things together — `panel-url`, `license` and `bundle-id`. Miss
+any one and nothing is sent. **`bundle-id` must be the id registered for that
+project in the panel**: an id the panel does not recognise is refused and the step
+fails, so a typo is loud rather than silent.
+
 Not on GitHub Actions? Every recipe under [`examples/`](examples/) ends by calling
 [`examples/report-to-panel.sh`](examples/report-to-panel.sh), which does the same
 POST from CircleCI, GitLab, Jenkins, Bitrise, fastlane or a laptop. It does nothing
-until you set `PANEL_URL`. If the panel *rejects* a report — usually a `bundle-id`
-that is not registered for your project — the step fails, because a green step that
-sent nothing is worse than a red one. If the panel is merely unreachable, it warns
-and your build is untouched.
+until you set all three of `PANEL_URL`, `LOGDROP_LICENSE` and `BUNDLE_ID`. If the
+panel *rejects* a report — usually a bundle id not registered for your project —
+the step fails, because a green step that sent nothing is worse than a red one. If
+the panel is merely unreachable, it warns and your build is untouched.
 
 The analyzer itself still contacts nothing: sending is a separate step on a report
 that already exists, which is what keeps "the scanner never phones home" true

@@ -6,6 +6,18 @@
 #   ./examples/local/scan.sh Sources
 #
 # No CI needed at all. Same binary, same rules, same exit codes.
+#
+# SENDING TO THE PANEL (optional) — three variables, and all three are needed:
+#
+#   PANEL_URL        your panel's address
+#   LOGDROP_LICENSE  your key (already required for the scan)
+#   BUNDLE_ID        your application's bundle id, AS REGISTERED IN THE PANEL
+#
+# Miss any one and nothing is sent: the step prints a line and stays green,
+# which is easy not to notice. A BUNDLE_ID the panel does not recognise for
+# this project is refused (400) and FAILS the step, so a wrong id is loud
+# rather than silent.
+# On a laptop you usually set none of them and the report simply stays here.
 set -euo pipefail
 
 TARGET="${1:-.}"

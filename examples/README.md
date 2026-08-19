@@ -18,10 +18,24 @@ action does both for you.
 ## Sending the report to the panel
 
 Optional, and off until you switch it on. Every recipe here ends by calling
-[`report-to-panel.sh`](report-to-panel.sh); without `PANEL_URL` set it prints one
-line and does nothing, so the step is safe to leave in place. Set `PANEL_URL` and
-`BUNDLE_ID` in whatever your CI uses for configuration and reports start arriving —
-no edit to the recipe.
+[`report-to-panel.sh`](report-to-panel.sh), and the step is safe to leave in place:
+with nothing configured it prints one line and does nothing.
+
+Three variables, and you need all three:
+
+| Variable | What it is |
+|---|---|
+| `PANEL_URL` | Your panel's address |
+| `LOGDROP_LICENSE` | Your key — already required for the scan itself |
+| `BUNDLE_ID` | Your application's bundle id, **as registered in the panel** |
+
+Set them wherever your CI keeps configuration and reports start arriving; no edit to
+the recipe. Miss one and nothing is sent, quietly — so if the dashboard stays empty,
+check that all three are actually reaching the job.
+
+**The bundle id must be registered for that project in the panel.** One the panel
+does not recognise is refused outright, nothing is stored, and the step fails. That
+is deliberate: a typo you can see beats a green pipeline that sent nothing.
 
 **The analyzer itself never contacts anything.** It verifies its licence offline,
 counts no usage and does not report that it ran. Sending is a separate step, on a
