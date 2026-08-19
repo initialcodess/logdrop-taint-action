@@ -1,0 +1,63 @@
+# Does `v1` still point at what `main` says?
+#
+# Customers write `uses: initialcodess/logdrop-taint-action@v1` and download
+# `examples/*` from the `v1` ref. Merging to `main` therefore reaches nobody: until
+# the tag moves, `@v1` keeps serving the previous commit. That has happened twice —
+# once when the panel reporting script was added and once when a rejected report was
+# made to fail the build. Both times the merge looked complete, both times customers
+# had the old file, and both times it surfaced only when something downstream broke.
+#
+# This job only tells you. It does NOT move the tag: which commit customers get is a
+# release decision, and a workflow that quietly retagged on every merge would hand
+# that decision to whoever pressed merge.
+name: v1 tag
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    # Catches a tag left behind by something other than a push — a merge from the
+    # web UI, or a revert.
+    - cron: "0 7 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: v1 points at main
+    # Linux: this is two git commands, and macOS would cost ten times as much for
+    # nothing. The analyzer is not built or run here.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compare v1 with main
+        run: |
+          set -euo pipefail
+
+          if ! git rev-parse -q --verify refs/tags/v1 >/dev/null; then
+            echo "::error title=v1 is missing::There is no v1 tag. Customers on @v1 have nothing to download."
+            exit 1
+          fi
+
+          # `v1` is an annotated tag, so it resolves to a tag object rather than a
+          # commit. rev-list -n1 walks through to the commit; rev-parse would compare
+          # the tag object's own sha and never match.
+          v1=$(git rev-list -n1 v1)
+          main=$(git rev-parse HEAD)
+
+          if [ "$v1" = "$main" ]; then
+            echo "v1 and main are both ${main:0:8}."
+            exit 0
+          fi
+
+          behind=$(git rev-list --count "$v1".."$main" 2>/dev/null || echo "?")
+          echo "::error title=v1 is behind main::v1 is at ${v1:0:8}, main is at ${main:0:8} ($behind commit(s) ahead). Customers on @v1 are still getting the older commit. Move the tag: git tag -f v1 main && git push -f origin v1"
+          echo ""
+          echo "Commits customers are missing:"
+          git log --oneline "$v1".."$main"
+          exit 1
