@@ -44,7 +44,7 @@ toolchain, no Homebrew. So you are not tied to GitHub Actions:
 
 ```bash
 # Download it once (change the version as needed)
-V=v1.14.0
+V=v1.15.0
 curl -fsSL -O "https://github.com/initialcodess/logdrop-taint-action/releases/download/$V/logdrop-taint-$V-macos-universal.tar.gz"
 curl -fsSL -O "https://github.com/initialcodess/logdrop-taint-action/releases/download/$V/logdrop-taint-$V-macos-universal.tar.gz.sha256"
 shasum -a 256 -c "logdrop-taint-$V-macos-universal.tar.gz.sha256"   # integrity
@@ -110,6 +110,7 @@ A file named directly on the command line is always scanned, whatever it is call
 | Personal data is stored in the clear (a local database, `UserDefaults`, Core Data) | CWE-312 |
 | User or network data is interpolated into a SQL query instead of being bound | CWE-89 |
 | User or network data is built into an `NSPredicate` format string instead of being passed as an argument | CWE-943 |
+| Personal data or a credential is copied to the system pasteboard, which every other app can read | CWE-200 |
 
 What a value is also comes from the name it is read from: `cvvTextField.text` is a
 CVV, while `searchTextField.text` is only user input and produces nothing — logging
