@@ -144,8 +144,9 @@ typed a half-finished line would be turned off within a day.
 
 ### Scanning less
 
-A whole project is scanned by default, which on a large one is noticeable on every
-build. Point it at a folder instead:
+The whole project is scanned by default — minus its test code, which the analyzer
+skips and says so. On a large project that is still noticeable on every build, so
+point it at a folder instead:
 
 ```
 SCAN_PATH="$SRCROOT/Sources" bash "$HOME/.logdrop/xcode-scan.sh"
