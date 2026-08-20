@@ -44,7 +44,7 @@ toolchain, no Homebrew. So you are not tied to GitHub Actions:
 
 ```bash
 # Download it once (change the version as needed)
-V=v1.13.0
+V=v1.14.0
 curl -fsSL -O "https://github.com/initialcodess/logdrop-taint-action/releases/download/$V/logdrop-taint-$V-macos-universal.tar.gz"
 curl -fsSL -O "https://github.com/initialcodess/logdrop-taint-action/releases/download/$V/logdrop-taint-$V-macos-universal.tar.gz.sha256"
 shasum -a 256 -c "logdrop-taint-$V-macos-universal.tar.gz.sha256"   # integrity
@@ -85,6 +85,21 @@ well. That feature is free on public repositories and depends on GitHub's paid C
 Security licence on private ones; without a licence the step warns and moves on —
 it **does not break the build**.
 
+## Test code is skipped
+
+Test fixtures are where fake credentials live: WordPress-iOS writes
+`blog.password = "test"` in five different test helpers, and nothing in the code
+distinguishes that from the real thing. Files under a `Tests`/`UITests` directory,
+or named `*Tests.swift` / `*Spec.swift`, are left out by default.
+
+It is not done quietly — the step prints what it skipped:
+
+```
+Skipped 591 test file(s). Use --include-tests to scan them.
+```
+
+A file named directly on the command line is always scanned, whatever it is called.
+
 ## What it finds
 
 | Scenario | CWE |
@@ -92,7 +107,7 @@ it **does not break the build**.
 | User, network or deep-link data reaches `WKWebView` unsanitised | CWE-79 |
 | A key hardcoded in the source reaches a crypto API | CWE-321 |
 | Personal data (email, phone, password, card number, PIN, SSN, passport, date of birth) is written to a log | CWE-532 |
-| Personal data is stored in the clear (a local database, `UserDefaults`) | CWE-312 |
+| Personal data is stored in the clear (a local database, `UserDefaults`, Core Data) | CWE-312 |
 | User or network data is interpolated into a SQL query instead of being bound | CWE-89 |
 | User or network data is built into an `NSPredicate` format string instead of being passed as an argument | CWE-943 |
 
