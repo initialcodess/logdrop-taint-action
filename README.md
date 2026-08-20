@@ -44,7 +44,7 @@ toolchain, no Homebrew. So you are not tied to GitHub Actions:
 
 ```bash
 # Download it once (change the version as needed)
-V=v1.12.0
+V=v1.13.0
 curl -fsSL -O "https://github.com/initialcodess/logdrop-taint-action/releases/download/$V/logdrop-taint-$V-macos-universal.tar.gz"
 curl -fsSL -O "https://github.com/initialcodess/logdrop-taint-action/releases/download/$V/logdrop-taint-$V-macos-universal.tar.gz.sha256"
 shasum -a 256 -c "logdrop-taint-$V-macos-universal.tar.gz.sha256"   # integrity
@@ -94,6 +94,7 @@ it **does not break the build**.
 | Personal data (email, phone, password, card number, PIN, SSN, passport, date of birth) is written to a log | CWE-532 |
 | Personal data is stored in the clear (a local database, `UserDefaults`) | CWE-312 |
 | User or network data is interpolated into a SQL query instead of being bound | CWE-89 |
+| User or network data is built into an `NSPredicate` format string instead of being passed as an argument | CWE-943 |
 
 What a value is also comes from the name it is read from: `cvvTextField.text` is a
 CVV, while `searchTextField.text` is only user input and produces nothing — logging
