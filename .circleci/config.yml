@@ -14,16 +14,26 @@
 #   2. Environment variables:
 #        LOGDROP_LICENSE   the CI licence key. Without it the analyzer exits 2 and the
 #                          run fails loudly rather than passing while proving nothing.
-#   3. Schedules live in CircleCI's UI or in a trigger; the weekly run that used to be
+#   3. Schedules live in CircleCI's UI as a trigger; the weekly run that used to be
 #      a GitHub cron is set up there.
+#   4. The self-hosted runner must be registered and online. Nothing here uses
+#      CircleCI's paid cloud macOS, so these runs cost nothing.
 
 version: 2.1
 
+# The Mac we already own, registered with CircleCI as a self-hosted runner.
+#
+# NOT CircleCI's cloud macOS. That is billed per minute and a plan without it does
+# not fail — the job sits at "Preparing environment" forever, which is what happened
+# the first time this was tried. The self-hosted runner costs nothing and the
+# pipeline looks identical. coffeeapp-demo has been running this way already.
+#
+# The runner has to be online for a job to start, and it uses whatever Swift is
+# installed on that machine rather than a pinned Xcode image.
 executors:
   mac:
-    macos:
-      xcode: "16.2.0"
-    resource_class: macos.m1.medium.gen1
+    machine: true
+    resource_class: initialcodess/macos
 
 jobs:
   smoke:
