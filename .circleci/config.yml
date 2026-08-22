@@ -83,7 +83,7 @@ jobs:
           command: |
             set -euo pipefail
             mkdir -p sample
-            cat > sample/Vulnerable.swift <<'SWIFT'
+            cat > sample/Vulnerable.swift \<<'SWIFT'
             // A known flow: user input reaches the WebView unsanitised.
             func render() {
                 let name = nameField.text ?? ""
