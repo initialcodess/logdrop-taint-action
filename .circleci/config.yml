@@ -16,24 +16,25 @@
 #                          run fails loudly rather than passing while proving nothing.
 #   3. Schedules live in CircleCI's UI as a trigger; the weekly run that used to be
 #      a GitHub cron is set up there.
-#   4. The self-hosted runner must be registered and online. Nothing here uses
-#      CircleCI's paid cloud macOS, so these runs cost nothing.
+#   4. macOS is a paid resource class on CircleCI. If the plan does not include it
+#      the job QUEUES at "Preparing environment" rather than failing.
 
 version: 2.1
 
-# The Mac we already own, registered with CircleCI as a self-hosted runner.
+# CircleCI's cloud macOS.
 #
-# NOT CircleCI's cloud macOS. That is billed per minute and a plan without it does
-# not fail — the job sits at "Preparing environment" forever, which is what happened
-# the first time this was tried. The self-hosted runner costs nothing and the
-# pipeline looks identical. coffeeapp-demo has been running this way already.
+# The self-hosted runner was tried first and the machine's own connection was the
+# limit, not the pipeline — see the analyzer repo's config for the measurements. A
+# job also does not FAIL when that Mac is asleep, it queues, which is the wrong
+# behaviour for a test whose whole point is to run unattended once a week.
 #
-# The runner has to be online for a job to start, and it uses whatever Swift is
-# installed on that machine rather than a pinned Xcode image.
+# `xcode` is the value to check against CircleCI's current image list; nothing here
+# compiles Swift, so it only has to be a macOS image that exists.
 executors:
   mac:
-    machine: true
-    resource_class: initialcodess/macos
+    macos:
+      xcode: "16.2.0"
+    resource_class: macos.m1.medium.gen1
 
 jobs:
   smoke:
@@ -62,6 +63,9 @@ jobs:
             echo "action.yml pins $version"
       - run:
           name: Download it exactly as the action does
+          # A stalled download must not hold the machine open; the point of
+          # this test is to notice breakage quickly, not to wait for it.
+          no_output_timeout: 5m
           command: |
             set -euo pipefail
             dir="/tmp/logdrop-taint/$VERSION"; mkdir -p "$dir"
@@ -90,6 +94,9 @@ jobs:
             echo "version matches: $got"
       - run:
           name: Scan a sample with one real flow and one sanitised
+          # A stalled download must not hold the machine open; the point of
+          # this test is to notice breakage quickly, not to wait for it.
+          no_output_timeout: 5m
           command: |
             set -euo pipefail
             mkdir -p sample
