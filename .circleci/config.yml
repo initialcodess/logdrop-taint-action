@@ -1,0 +1,116 @@
+# The smoke test that proves DISTRIBUTION still works, run on CircleCI.
+#
+# It used to live in .github/workflows/smoke.yml on a macOS runner. GitHub Actions
+# must never be given a macOS runner for our own repositories: those minutes bill at
+# ten times Linux and on 22 August 2026 they took the account past its spending limit,
+# at which point CI stopped starting jobs at all. Customers still run this action on
+# their own macOS runners — that is their bill and unchanged. This is ours.
+#
+# It needs a Mac for a real reason: the published binary is a macOS universal binary,
+# and the whole point is to download and run the thing a customer downloads and runs.
+#
+# SETUP (once, in the CircleCI UI):
+#   1. Follow this project.
+#   2. Environment variables:
+#        LOGDROP_LICENSE   the CI licence key. Without it the analyzer exits 2 and the
+#                          run fails loudly rather than passing while proving nothing.
+#   3. Schedules live in CircleCI's UI or in a trigger; the weekly run that used to be
+#      a GitHub cron is set up there.
+
+version: 2.1
+
+executors:
+  mac:
+    macos:
+      xcode: "16.2.0"
+    resource_class: macos.m1.medium.gen1
+
+jobs:
+  smoke:
+    executor: mac
+    steps:
+      - checkout
+      - run:
+          name: The licence must be configured
+          command: |
+            if [ -z "${LOGDROP_LICENSE:-}" ]; then
+              echo "LOGDROP_LICENSE is not set on this project. The analyzer would exit 2"
+              echo "and this test would report a licence problem as if it were a broken"
+              echo "download. Set it in Project settings → Environment variables."
+              exit 1
+            fi
+      - run:
+          name: The version this action pins
+          command: |
+            set -euo pipefail
+            version=$(grep -A3 '^  analyzer-version:' action.yml | grep 'default:' | head -1 |
+                      sed -E 's/.*"(v[0-9]+\.[0-9]+\.[0-9]+)".*/\1/')
+            if ! [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "Could not read analyzer-version out of action.yml (got '$version')"; exit 1
+            fi
+            echo "export VERSION=$version" >> "$BASH_ENV"
+            echo "action.yml pins $version"
+      - run:
+          name: Download it exactly as the action does
+          command: |
+            set -euo pipefail
+            dir="/tmp/logdrop-taint/$VERSION"; mkdir -p "$dir"
+            archive="logdrop-taint-${VERSION}-macos-universal.tar.gz"
+            base="https://github.com/initialcodess/logdrop-taint-action/releases/download/${VERSION}"
+            # A 404 here is the failure this test exists to catch: it means the pin was
+            # advanced before the release was published, and every customer on @v1 is
+            # downloading nothing.
+            if ! curl -fsSL --retry 3 --retry-delay 2 -o "$dir/$archive" "$base/$archive"; then
+              echo "The analyzer could not be fetched. The likeliest cause: action.yml pins"
+              echo "$VERSION but that version has not been published yet."
+              exit 1
+            fi
+            curl -fsSL --retry 3 --retry-delay 2 -o "$dir/$archive.sha256" "$base/$archive.sha256"
+            # Integrity: byte-identical to what was published.
+            ( cd "$dir" && shasum -a 256 -c "$archive.sha256" )
+            tar -xzf "$dir/$archive" -C "$dir"
+            chmod +x "$dir/logdrop-taint"
+            echo "export BIN=$dir/logdrop-taint" >> "$BASH_ENV"
+      - run:
+          name: The binary reports the version it was pinned as
+          command: |
+            set -euo pipefail
+            got="$("$BIN" --version)"
+            [ "$got" = "${VERSION#v}" ] || { echo "binary says $got, action.yml pins $VERSION"; exit 1; }
+            echo "version matches: $got"
+      - run:
+          name: Scan a sample with one real flow and one sanitised
+          command: |
+            set -euo pipefail
+            mkdir -p sample
+            cat > sample/Vulnerable.swift <<'SWIFT'
+            // A known flow: user input reaches the WebView unsanitised.
+            func render() {
+                let name = nameField.text ?? ""
+                webView.loadHTMLString("<h1>\(name)</h1>", baseURL: nil)
+            }
+            // The sanitised form must produce NO finding.
+            func safe() {
+                let name = nameField.text ?? ""
+                webView.loadHTMLString(escapeHTML(name), baseURL: nil)
+            }
+            SWIFT
+            set +e
+            "$BIN" sample --sarif /tmp/smoke.sarif --fail-on-findings
+            code=$?
+            set -e
+            # Exactly ONE. "At least one" would hide the sanitiser breaking, and a false
+            # positive is the most expensive mistake this product can make.
+            findings=$(python3 -c "import json;print(len(json.load(open('/tmp/smoke.sarif'))['runs'][0]['results']))")
+            [ "$findings" -eq 1 ] || { echo "expected 1 finding, got $findings"; exit 1; }
+            # And the gate has to bite: findings mean exit 1, which is what stops a
+            # customer's pull request.
+            [ "$code" -eq 1 ] || { echo "--fail-on-findings returned $code, expected 1"; exit 1; }
+            echo "Distribution verified: 1 finding, gate exits 1."
+      - store_artifacts:
+          path: /tmp/smoke.sarif
+
+workflows:
+  smoke:
+    jobs:
+      - smoke
