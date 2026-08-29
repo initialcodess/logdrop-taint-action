@@ -13,6 +13,12 @@ rest of your code are never sent.
 If you do not want even that, set `snippets: "false"`: the report then carries only
 the rule and `file:line`, and not a single line of your code leaves.
 
+The Android counterpart is
+[logdrop-taint-android-action](https://github.com/initialcodess/logdrop-taint-android-action).
+Both produce the same report shape and read the same `.logdrop.json` and
+suppressions file, so a team shipping both apps sees one kind of finding and
+records a judgement once.
+
 ## Usage
 
 ```yaml
@@ -290,6 +296,18 @@ The three mean different things and are never conflated:
 | `1` | Findings (only with `fail-on-findings: "true"`) |
 | `2` | A licence problem (missing / invalid / expired) |
 | `3` | An error in the `.logdrop.json` config file |
+
+## Requirements
+
+**macOS 15 or newer.** The analyzer links against Apple system libraries, so it runs
+where iOS code is already built — no Xcode, no Swift toolchain, no Homebrew, and
+nothing compiled in your project.
+
+That is the one real difference from the Android analyzer, which needs only a JVM and
+runs in a plain Linux container. Cloud providers bill macOS roughly ten times Linux,
+and a scan takes seconds — but the difference drops to **zero** on your own Mac,
+which most iOS teams already have and which this action supports as a self-hosted
+runner.
 
 ## Licence
 
