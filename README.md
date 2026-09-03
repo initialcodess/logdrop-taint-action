@@ -15,9 +15,8 @@ the rule and `file:line`, and not a single line of your code leaves.
 
 The Android counterpart is
 [logdrop-taint-android-action](https://github.com/initialcodess/logdrop-taint-android-action).
-Both produce the same report shape and read the same `.logdrop.json` and
-suppressions file, so a team shipping both apps sees one kind of finding and
-records a judgement once.
+Both produce the same report shape and read the same `.logdrop.json`, so a team
+shipping both apps sees one kind of finding and configures it once.
 
 ## Usage
 
@@ -175,8 +174,7 @@ is unaffected.
 
 Put a `.logdrop.json` at your repository root to adapt the rules to your project.
 This is how you teach the analyzer about **your** code — your sanitising function,
-your field names, your logging wrapper. Clearing a single finding you have judged
-and disagreed with is a different thing; see [Silencing a finding](#silencing-a-finding-you-have-judged).
+your field names, your logging wrapper.
 
 ```json
 {
@@ -202,71 +200,6 @@ Labels: `user-input`, `hardcoded-secret`, `pii`, `credential`.
 
 A bad config is **not ignored silently**: an unrecognised field, rule or label is
 rejected before the scan starts, and the message lists the valid ones.
-
-## Silencing a finding you have judged
-
-Sometimes a finding is real code and still not a problem for you. You should be able
-to say so once and not be asked again.
-
-That judgement lives in `.logdrop-suppressions.json` at your repository root, and it
-is **written and signed by the LogDrop panel**. The analyzer verifies the signature
-offline — it contacts nothing, here or anywhere else — and honours nothing it cannot
-verify.
-
-```json
-{
-  "version": 1,
-  "suppressions": [
-    {
-      "fingerprint": "a3f1c0d92b74e518",
-      "reason": "Test double; this password is not a real one",
-      "by": "ayse@example.com",
-      "at": "2026-08-26"
-    }
-  ],
-  "signature": "…"
-}
-```
-
-**Why signed rather than a file you write yourself.** Not to make it hard for you —
-if you want the scan gone you can delete this step in one line. It is so that
-silencing a finding costs a moment of thought. An unsigned file gets a line appended
-the first time a build goes red, by whoever is in a hurry; nobody reviews it, and a
-real leak gets silenced with the same keystroke as a false alarm. Going through the
-panel means somebody said why, and it is written down.
-
-The file stays readable and stays in your repository, so anyone reviewing a pull
-request can see what is being silenced and object to it.
-
-**What the signature covers:** which findings are silenced, and the expiry. It does
-**not** cover `reason`, `by` or `at` — those are for whoever reads the diff, and
-fixing a typo in a sentence must not invalidate the file.
-
-**A silenced finding is not deleted.** It stays in the report, marked as suppressed
-with your reason attached, so GitHub Code Scanning and the panel show it as closed
-rather than as never having existed. The count says so plainly:
-
-```
-LogDrop Taint: 4 finding(s) (1 suppressed) → logdrop-taint.sarif
-```
-
-It does not fail the build.
-
-**If the file cannot be verified, it is ignored and every finding is reported** — and
-the reason is printed. A hand-edited file, a file signed with the wrong key, an
-expired one: all of them say so out loud. Believing a finding is silenced when it is
-not is the one outcome worth protecting you from.
-
-**A judgement is about a line, not a line number.** Moving code around, adding an
-import, reformatting: the suppression holds. Editing the offending line itself
-releases it, and that is deliberate — the code you judged is no longer the code that
-is there.
-
-> **Not `exclude`.** `exclude` in `.logdrop.json` drops whole paths from the scan,
-> unsigned, with nobody named. Used to clear one finding it also silences every
-> future finding in that file, and nobody notices. It is for code that is not yours —
-> vendored dependencies and the like. Every scan prints how many files it dropped and
-> why, so a list that grows during a red build shows up in the log.
 
 ## Inputs
 
