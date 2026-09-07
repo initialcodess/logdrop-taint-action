@@ -58,6 +58,9 @@ outputs:
   findings:
     description: "How many findings were reported."
     value: ${{ steps.scan.outputs.findings }}
+  report-id:
+    description: "Identifier of the report the panel stored. Empty when no panel-url was given, or when the send failed."
+    value: ${{ steps.panel.outputs.report-id }}
 
 runs:
   using: composite
@@ -197,6 +200,7 @@ runs:
     # always(): with fail-on-findings the scan step exits 1. That is exactly when the
     # report matters — when there are findings.
     - name: Notify the panel
+      id: panel
       if: ${{ always() && inputs.panel-url != '' && steps.scan.outputs.sarif-written == 'true' }}
       shell: bash
       working-directory: ${{ github.workspace }}
@@ -235,7 +239,21 @@ runs:
         # be a fault charged to us. Nor do we pass silently — a warning is emitted.
         case "$code" in
           200|201)
-            echo "Sent to the panel: $(head -c 300 "$body")"
+            # The id the panel filed the report under. Printing "sent" and nothing
+            # else leaves no way to reach the report: a customer cannot search the
+            # tenant's report list, and we have had to do it by hand three times.
+            # `sed` rather than `jq` or `python3`: neither is guaranteed on a
+            # customer's runner, and this must not be the line that fails.
+            report_id=$(sed -n 's/.*"report_id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$body" | head -1)
+            if [ -n "$report_id" ]; then
+              echo "report-id=$report_id" >> "$GITHUB_OUTPUT"
+              echo "::notice title=LogDrop panel::Report $report_id was stored by the panel."
+              echo "LogDrop panel report: \`$report_id\`" >> "$GITHUB_STEP_SUMMARY"
+            else
+              # Accepted, but we cannot say what was stored. Not a build failure —
+              # the scan and its reporting already ran — but not silent either.
+              echo "::warning title=Panel report id missing::The panel accepted the report but returned no id: $(head -c 300 "$body")"
+            fi
             ;;
           401)
             echo "::warning title=Panel report not sent::The panel refused the licence key (401). Check the key."
