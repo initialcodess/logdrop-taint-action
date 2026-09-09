@@ -49,7 +49,7 @@ toolchain, no Homebrew. So you are not tied to GitHub Actions:
 
 ```bash
 # Download it once (change the version as needed)
-V=v1.23.2
+V=v1.24.0
 curl -fsSL -O "https://github.com/initialcodess/logdrop-taint-action/releases/download/$V/logdrop-taint-$V-macos-universal.tar.gz"
 curl -fsSL -O "https://github.com/initialcodess/logdrop-taint-action/releases/download/$V/logdrop-taint-$V-macos-universal.tar.gz.sha256"
 shasum -a 256 -c "logdrop-taint-$V-macos-universal.tar.gz.sha256"   # integrity
@@ -116,6 +116,22 @@ A file named directly on the command line is always scanned, whatever it is call
 | User or network data is interpolated into a SQL query instead of being bound | CWE-89 |
 | User or network data is built into an `NSPredicate` format string instead of being passed as an argument | CWE-943 |
 | Personal data or a credential is copied to the system pasteboard, which every other app can read | CWE-200 |
+| A server certificate is accepted without anything having checked it | CWE-295 |
+
+Memory and resource leaks are reported too, and are on by default — set
+`leaks: "false"` to turn them off. They are a different question from the ones
+above (not "did a value reach somewhere dangerous" but "was an owned thing ever
+given back"), and they add roughly a quarter to the scan time.
+
+| Scenario | CWE |
+|---|---|
+| Two objects hold each other strongly, so neither is ever freed | CWE-401 |
+| Manually allocated memory is not released on every path out of the function | CWE-401 |
+
+Measured on six real applications before release: two findings, both confirmed by
+hand, none wrong. A body the analysis cannot model is skipped rather than guessed
+at, and the scan prints how many — about 1% of them, mostly helpers using `break`
+inside a loop.
 
 What a value is also comes from the name it is read from: `cvvTextField.text` is a
 CVV, while `searchTextField.text` is only user input and produces nothing — logging
@@ -210,6 +226,7 @@ rejected before the scan starts, and the message lists the valid ones.
 | `fail-on-findings` | `false` | Fail the step when there are findings. |
 | `annotations` | `true` | Inline boxes on the pull request. |
 | `snippets` | `true` | The offending line plus ±2 lines of context in the report. With `false`, no fragment of your code leaves. |
+| `leaks` | `true` | Report memory and resource leaks as well as security findings. Adds roughly 25% to the scan; `false` turns it off. |
 | `upload-sarif` | `true` | Attempt to upload to Code Scanning. |
 | `sarif-file` | `logdrop-taint.sarif` | SARIF output path. |
 | `repo-root` | `github.workspace` | The root SARIF paths are relative to. |
@@ -217,7 +234,9 @@ rejected before the scan starts, and the message lists the valid ones.
 | `bundle-id` | *(empty)* | The application id. Required when `panel-url` is set. |
 | `analyzer-version` | the version tested with this release | You should not need to change it. |
 
-**Outputs:** `findings` (the count), `sarif-file`.
+**Outputs:** `findings` (the count), `sarif-file`, `report-id` (the id the panel
+filed the report under — empty when no `panel-url` was given, or when the send
+failed).
 
 ## Exit codes
 

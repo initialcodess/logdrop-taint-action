@@ -46,10 +46,14 @@ inputs:
     description: "Include the offending line and ±2 lines of context in the report (on by default). Set to 'false' and the report carries only the rule and file:line — not a fragment of your code leaves."
     required: false
     default: "true"
+  leaks:
+    description: "Report memory and resource leaks as well as security findings (on by default). Set to 'false' to switch it off; it adds roughly 30% to scan time."
+    required: false
+    default: "true"
   analyzer-version:
     description: "Which analyzer version to download. The default is the one tested with this action release — you should not need to change it."
     required: false
-    default: "v1.23.2"
+    default: "v1.24.0"
 
 outputs:
   sarif-file:
@@ -118,12 +122,20 @@ runs:
         FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
         ANNOTATIONS: ${{ inputs.annotations }}
         SNIPPETS: ${{ inputs.snippets }}
+        LEAKS: ${{ inputs.leaks }}
       run: |
         set -o pipefail
         args=("$SCAN_PATH" --sarif "$SARIF_FILE" --repo-root "$REPO_ROOT" --verbose)
         [ "$FAIL_ON_FINDINGS" = "true" ] && args+=(--fail-on-findings)
         [ "$ANNOTATIONS" = "true" ] && args+=(--github-annotations)
-        [ "$SNIPPETS" = "false" ] && args+=(--no-snippets)
+        # Both flags go in EXPLICITLY, in whichever direction the input asks for,
+        # rather than only when the input differs from the analyzer's default.
+        # Passing only the odd one out makes the action's promise "whatever the
+        # binary does today": the day a default changes, `snippets: true` or
+        # `leaks: false` becomes a request this action never makes, and the customer
+        # gets the opposite of what their workflow says while nothing errors.
+        if [ "$SNIPPETS" = "false" ]; then args+=(--no-snippets); else args+=(--snippets); fi
+        if [ "$LEAKS" = "true" ]; then args+=(--leaks); else args+=(--no-leaks); fi
 
         # PRESERVE the exit code: 0 clean · 1 findings · 2 licence. Each means something different.
         set +e
