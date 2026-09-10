@@ -162,16 +162,16 @@ local.
 
 Sending needs three things together — `panel-url`, `license` and `bundle-id`. Miss
 any one and nothing is sent. **`bundle-id` must be the id registered for that
-project in the panel**: an id the panel does not recognise is refused and the step
-fails, so a typo is loud rather than silent.
+project in the panel**: an id the panel does not recognise is refused, nothing is
+stored, and the step says so loudly — but it does not fail your build unless you
+ask it to (see below).
 
 Not on GitHub Actions? Every recipe under [`examples/`](examples/) ends by calling
 [`examples/report-to-panel.sh`](examples/report-to-panel.sh), which does the same
 POST from CircleCI, GitLab, Jenkins, Bitrise, fastlane or a laptop. It does nothing
-until you set all three of `PANEL_URL`, `LOGDROP_LICENSE` and `BUNDLE_ID`. If the
-panel *rejects* a report — usually a bundle id not registered for your project —
-the step fails, because a green step that sent nothing is worse than a red one. If
-the panel is merely unreachable, it warns and your build is untouched.
+until you set all three of `PANEL_URL`, `LOGDROP_LICENSE` and `BUNDLE_ID`. It follows
+the same rule as the action: every delivery problem is a loud warning and exit 0,
+and `FAIL_ON_DELIVERY_ERROR=true` turns them all into exit 1.
 
 The analyzer itself still contacts nothing: sending is a separate step on a report
 that already exists, which is what keeps "the scanner never phones home" true
@@ -182,9 +182,28 @@ number and (if enabled) the code of the offending line — so the panel can show
 faulty code with the relevant line highlighted. Turn the snippets off with
 `snippets: "false"`, or stop the sending altogether by leaving `panel-url` unset.
 
-If the panel is unreachable or refuses the key, **your build is not broken** — a
-warning is emitted and the scan result (inline annotations, job summary, exit code)
-is unaffected.
+### A report that never arrives does not fail your build
+
+**Nothing about sending breaks your build by default** — not an unreachable panel,
+not a refused key, not a rejected report. A warning is emitted, `report-id` comes
+back empty, and the scan result (inline annotations, job summary, exit code) is
+unaffected.
+
+That used to be split: a rejected report failed the build, an unreachable panel did
+not, on the reasoning that a rejection is yours to fix. It is not always. A bundle
+id deleted or renamed in the panel answers the same way. A licence moved to another
+project answers the same way. None of them is something the developer whose pull
+request just went red can do anything about, and the action cannot tell them apart
+from a typo.
+
+The two ways of being wrong do not cost the same. A build blocked for a reason the
+team cannot fix ends with the step deleted, and then no report is ever sent again.
+A report that goes missing is bad, but it blocks nobody and is answered by saying
+so loudly.
+
+If you want delivery guaranteed, set `fail-on-delivery-error: "true"` and *any*
+failure to deliver becomes exit 1. One switch, no per-code table — "did the report
+arrive" is the question a team can act on.
 
 ## Adapting it to your codebase
 
@@ -232,6 +251,7 @@ rejected before the scan starts, and the message lists the valid ones.
 | `repo-root` | `github.workspace` | The root SARIF paths are relative to. |
 | `panel-url` | *(empty)* | The panel address, if reports should go to the LogDrop panel. **Empty means nothing is sent.** |
 | `bundle-id` | *(empty)* | The application id. Required when `panel-url` is set. |
+| `fail-on-delivery-error` | `false` | Fail the step when the report could not be sent to the panel. Off by default; see above. |
 | `analyzer-version` | the version tested with this release | You should not need to change it. |
 
 **Outputs:** `findings` (the count), `sarif-file`, `report-id` (the id the panel
